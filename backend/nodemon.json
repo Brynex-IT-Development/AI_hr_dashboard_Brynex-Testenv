@@ -1,0 +1,4 @@
+{
+  "watch": ["src", "server.js"],
+  "ignore": ["uploads/*", "node_modules/*"]
+}

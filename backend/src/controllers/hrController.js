@@ -5,6 +5,7 @@ import { analyzeMultiFileHrData, identifyFileScope } from '../services/multiFile
 import { runClaudeDocumentAnalysis, runClaudeApiAnalysis } from '../services/aiDocumentAnalyzerService.js';
 import { aggregateHrIntelligence } from '../services/hrIntelligenceAggregator.js';
 import { fetchAllStoresOverview, fetchAllEmployeesOverview } from '../services/externalIntegrationService.js';
+import { parsePromptIntent, recordMatchesPrompt, itemMatchesPrompt } from '../services/promptMatcherService.js';
 
 // In-memory stores (strictly populated by actual file uploads)
 let uploadedFilesStore = [];
@@ -57,77 +58,13 @@ export const filterEmployeesByPrompt = (employees = [], prompt = '', customRules
     filtered = filtered.filter((e) => (e.dept || '').toLowerCase().includes(dTarget));
   }
 
-  // 2. Keyword/phrase filter from prompt
-  const p = (prompt || '').trim().toLowerCase();
-  if (p && !p.includes('no prompt') && !p.includes('all data') && !p.includes('show all')) {
-    // Check specific conditions: overtime
-    if (p.includes('overtime') || p.includes(' ot ')) {
-      const otMatch = filtered.filter((e) => {
-        const val = parseFloat(String(e.ot).replace(/[^0-9.]/g, '')) || 0;
-        return val > 0;
-      });
-      if (otMatch.length > 0) return otMatch;
-    }
-
-    // Check specific conditions: notice / resignation / exit
-    if (p.includes('notice') || p.includes('resigned') || p.includes('exit') || p.includes('attrition')) {
-      const exitMatch = filtered.filter((e) => {
-        const r = (e.risk || '').toLowerCase();
-        return r.includes('critical') || r.includes('high') || r.includes('notice') || r.includes('exit');
-      });
-      if (exitMatch.length > 0) return exitMatch;
-    }
-
-    // Strip filler phrases to isolate core target (e.g. "only show FASHION CONSULTANT data" -> "fashion consultant")
-    const cleaned = p
-      .replace(/\bonly show\b/gi, '')
-      .replace(/\bshow\b/gi, '')
-      .replace(/\bfocus on\b/gi, '')
-      .replace(/\bfilter by\b/gi, '')
-      .replace(/\bdata\b/gi, '')
-      .replace(/\bemployees?\b/gi, '')
-      .replace(/\bstaff\b/gi, '')
-      .replace(/\bprofiles?\b/gi, '')
-      .replace(/\bplease\b/gi, '')
-      .replace(/\ball\b/gi, '')
-      .trim();
-
-    if (cleaned.length > 0) {
-      // Direct substring match on role, dept, branch, name, or id
-      const exactMatch = filtered.filter((e) => {
-        const role = (e.role || '').toLowerCase();
-        const dept = (e.dept || '').toLowerCase();
-        const branch = (e.branch || '').toLowerCase();
-        const name = (e.name || '').toLowerCase();
-        const id = (e.id || '').toLowerCase();
-        return (
-          role.includes(cleaned) ||
-          dept.includes(cleaned) ||
-          branch.includes(cleaned) ||
-          name.includes(cleaned) ||
-          id.includes(cleaned)
-        );
-      });
-
-      if (exactMatch.length > 0) {
-        return exactMatch;
-      }
-
-      // Word-by-word token matching for multi-word queries
-      const tokens = cleaned.split(/\s+/).filter((t) => t.length > 2);
-      if (tokens.length > 0) {
-        const tokenMatch = filtered.filter((e) => {
-          const hay = `${e.role} ${e.dept} ${e.branch} ${e.name} ${e.id}`.toLowerCase();
-          return tokens.some((t) => hay.includes(t));
-        });
-        if (tokenMatch.length > 0) {
-          return tokenMatch;
-        }
-      }
-    }
+  // 2. Intent-based matching
+  const intent = parsePromptIntent(prompt);
+  if (!intent.isFiltered) {
+    return filtered;
   }
 
-  return filtered;
+  return filtered.filter((e) => recordMatchesPrompt(e, intent));
 };
 
 /**
@@ -138,11 +75,13 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
   if (!csvAnalysis) return apiAnalysis;
   if (!apiAnalysis) return csvAnalysis;
 
+  const intent = parsePromptIntent(activeAdminPrompt);
+
   const csvItems = (csvAnalysis && Array.isArray(csvAnalysis.attentionItems)) ? csvAnalysis.attentionItems : [];
   const apiItems = (apiAnalysis && Array.isArray(apiAnalysis.attentionItems)) ? apiAnalysis.attentionItems : [];
 
   const seenIds = new Set();
-  const combinedAttentionItems = [];
+  let combinedAttentionItems = [];
 
   // 1. Add CSV-derived intelligence items first
   for (const item of csvItems) {
@@ -160,6 +99,11 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
     }
   }
 
+  // Enforce prompt isolation on attention items to prevent cross-branch leakage
+  if (intent.isFiltered) {
+    combinedAttentionItems = combinedAttentionItems.filter((item) => itemMatchesPrompt(item, intent));
+  }
+
   // Calculate synchronized KPI counters
   const totalIssues = combinedAttentionItems.length;
   const awaitedDecisionsCount = combinedAttentionItems.filter(
@@ -169,12 +113,18 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
     (i) => i.category === 'Opportunity'
   ).length;
 
+  const totalHeadcount = intent.isFiltered
+    ? (cachedSyncedEmployees.length > 0 ? cachedSyncedEmployees.length : (csvAnalysis.totalRecords || 0))
+    : (csvAnalysis.totalRecords || allSyncedEmployees.length || 0);
+
   const mergedKpis = (csvAnalysis.kpiMetrics || apiAnalysis.kpiMetrics || []).map((kpi) => {
     if (kpi.id === 'issues') {
       return {
         ...kpi,
         value: String(totalIssues),
-        trend: `${totalIssues} active risks across datasets`
+        trend: intent.isFiltered
+          ? `${totalIssues} active risks for "${activeAdminPrompt}"`
+          : `${totalIssues} active risks across datasets`
       };
     }
     if (kpi.id === 'decisions') {
@@ -191,10 +141,21 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
         trend: `${opportunitiesCount} optimization areas detected`
       };
     }
+    if (kpi.id === 'monitored') {
+      return {
+        ...kpi,
+        value: String(totalHeadcount),
+        trend: intent.isFiltered
+          ? `${totalHeadcount} staff matching "${activeAdminPrompt}"`
+          : `${totalHeadcount} staff monitored`
+      };
+    }
     return kpi;
   });
 
-  const totalHeadcount = (csvAnalysis.totalRecords || allSyncedEmployees.length || 0);
+  const attentionSummary = intent.isFiltered
+    ? `Active Focus: "${activeAdminPrompt}". Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} matching records). ${combinedAttentionItems.length} active management issues.`
+    : `Dual-layer intelligence active: Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} employee records) correlated with Live Retail LMS API telemetry. ${combinedAttentionItems.length} total attention issues active.`;
 
   return {
     ...apiAnalysis,
@@ -203,7 +164,7 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
     attentionItems: combinedAttentionItems,
     connectedFilesCount: uploadedFilesStore.length,
     fileNames: uploadedFilesStore.map((f) => f.name),
-    attentionSummary: `Dual-layer intelligence active: Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} employee records) correlated with Live Retail LMS API telemetry (Perinthalmanna, Edappally & 25 stores). ${combinedAttentionItems.length} total attention issues active.`,
+    attentionSummary,
     storesSummary: apiAnalysis.storesSummary || csvAnalysis.storesSummary,
     enterpriseAnalytics: apiAnalysis.enterpriseAnalytics || csvAnalysis.enterpriseAnalytics,
     employeesSummary: apiAnalysis.employeesSummary || csvAnalysis.employeesSummary
@@ -260,8 +221,10 @@ const hydrateFilesFromDisk = async () => {
           const filePath = path.join(UPLOADS_DIR, meta.savedFilename);
           if (fs.existsSync(filePath)) {
             const parsedRows = await parseUploadedFile(filePath, meta.name);
+            const detectedHolds = identifyFileScope(meta.name, parsedRows);
             restored.push({
               ...meta,
+              holds: detectedHolds,
               downloadUrl: `/api/hr/files/${meta.savedFilename}/download`,
               rows: parsedRows.length,
               parsedRows
@@ -271,6 +234,25 @@ const hydrateFilesFromDisk = async () => {
 
         if (restored.length > 0) {
           uploadedFilesStore = restored;
+          try {
+            const existingContent = fs.readFileSync(REGISTRY_PATH, 'utf-8');
+            const currentString = JSON.stringify({
+              files: uploadedFilesStore.map((f) => ({
+                id: f.id,
+                name: f.name,
+                savedFilename: f.savedFilename,
+                holds: f.holds,
+                period: f.period,
+                status: f.status,
+                uploadedAt: f.uploadedAt
+              })),
+              activeAdminPrompt,
+              activeCustomRules
+            }, null, 2);
+            if (existingContent.trim() !== currentString.trim()) {
+              persistFilesRegistry();
+            }
+          } catch (_) {}
           console.log(`[Hydration] Successfully hydrated ${restored.length} connected files from disk.`);
         }
       }

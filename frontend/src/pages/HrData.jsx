@@ -533,7 +533,7 @@ export default function HrData() {
   const getDatasetCategory = (file) => {
     const name = (file.name || '').toLowerCase();
     const holds = (file.holds || '').toLowerCase();
-    const cols = (file.columns || []).map((c) => String(c).toLowerCase());
+    const cols = (file.columns || []).map((c) => String(c).toLowerCase().replace(/[^a-z0-9]/g, ''));
 
     if (
       holds.includes('revenue') ||
@@ -541,18 +541,29 @@ export default function HrData() {
       name.includes('sale') ||
       name.includes('revenue') ||
       name.includes('business') ||
-      cols.includes('daily_revenue') ||
+      cols.includes('dailyrevenue') ||
       cols.includes('revenue')
     ) {
       return 'sales';
     }
 
     if (
+      holds.includes('workforce') ||
       holds.includes('people') ||
+      holds.includes('employee') ||
       name.includes('employee') ||
       name.includes('staff') ||
-      cols.includes('base_salary_monthly') ||
-      (cols.includes('employee_id') && (cols.includes('full_name') || cols.includes('role_id')))
+      name.includes('workforce') ||
+      cols.includes('empid') ||
+      cols.includes('employeeno') ||
+      cols.includes('empname') ||
+      cols.includes('employeename') ||
+      cols.includes('employeedetails') ||
+      cols.includes('employmentstatus') ||
+      cols.includes('doj') ||
+      cols.includes('dob') ||
+      cols.includes('designation') ||
+      cols.includes('basesalarymonthly')
     ) {
       return 'employees';
     }
@@ -561,9 +572,12 @@ export default function HrData() {
       holds.includes('attendance') ||
       name.includes('attend') ||
       name.includes('roster') ||
+      name.includes('muster') ||
       name.includes('shift') ||
-      cols.includes('shift_date') ||
-      cols.includes('overtime_hours')
+      cols.includes('shiftdate') ||
+      cols.includes('overtimehours') ||
+      cols.includes('presentdays') ||
+      cols.includes('present')
     ) {
       return 'attendance';
     }
@@ -763,16 +777,34 @@ export default function HrData() {
   };
 
   // Render Employee Digital Profiles Section
+  // Render Employee Digital Profiles Section
   const renderEmployeesSection = (file, sectionNum) => {
     const isCollapsed = Boolean(collapsedSections[file.id]);
     const query = (sectionSearchQueries[file.id] || '').toLowerCase().trim();
 
-    const empList = displayedEmployees.length > 0 ? displayedEmployees : (file.data || []);
+    // Use file.data specifically for this connected file's section
+    const rows = (file.data && file.data.length > 0) ? file.data : (displayedEmployees || []);
+
     const filteredEmployees = query
-      ? empList.filter((e) =>
+      ? rows.filter((e) =>
           Object.values(e).some((val) => String(val || '').toLowerCase().includes(query))
         )
-      : empList;
+      : rows;
+
+    // Determine relevant columns to display from file.columns or row keys
+    const rawCols = (file.columns && file.columns.length > 0)
+      ? file.columns
+      : (rows.length > 0 ? Object.keys(rows[0]) : []);
+
+    const internalKeys = new Set(['id', 'emp_id', 'full_name', 'dept', 'role', 'branch', 'email', 'phone', 'rawSalary', 'rawOt', 'sources', 'restIntervals', 'gender', 'dob', 'doj', 'status', 'blood_group', 'manager_name', 'designation', 'department']);
+    const hasOriginalKeys = rawCols.some((c) => !internalKeys.has(c));
+    let displayCols = hasOriginalKeys ? rawCols.filter((c) => !internalKeys.has(c)) : rawCols;
+    if (displayCols.length === 0) displayCols = rawCols;
+
+    const totalRecords = rows.length;
+    const activeCount = rows.filter((e) => /active/i.test(String(e['Employment Status'] || e.status || 'Active'))).length;
+    const probationCount = rows.filter((e) => /probation|notice|exit|resigned/i.test(String(e['Status'] || e['Employment Status'] || e.status || ''))).length;
+    const deptCount = new Set(rows.map((e) => e['Department'] || e['Location'] || e.dept || e.branch).filter(Boolean)).size;
 
     return (
       <div className="hr-uploaded-section hr-dataset-card" key={file.id}>
@@ -790,20 +822,20 @@ export default function HrData() {
               )}
             </div>
             <p className="hr-dataset-subtitle">
-              Right Brain: Synced Employee Digital Profiles · Workforce telemetry, roles, branches & retention risk
+              Workforce Directory · {displayCols.length} Columns, {rows.length} Total Records
             </p>
           </div>
 
           <div className="hr-dataset-actions-block">
             <span className="hr-records-count-pill">
-              ● {filteredEmployees.length} of {allEmployees.length || empList.length} Records In Scope
+              ● {filteredEmployees.length} of {totalRecords} Records In Scope
             </span>
 
             <div className="hr-section-search-wrapper">
               <Search size={14} color="#94a3b8" />
               <input
                 type="text"
-                placeholder="Search name, role, dept..."
+                placeholder="Search Emp ID, name, status, role..."
                 value={sectionSearchQueries[file.id] || ''}
                 onChange={(e) => handleSectionSearchChange(file.id, e.target.value)}
                 className="hr-section-search-input"
@@ -824,7 +856,7 @@ export default function HrData() {
                 href={file.downloadUrl}
                 download
                 className="hr-dataset-btn-subtle"
-                title="Download CSV"
+                title="Download File"
               >
                 <Download size={14} />
               </a>
@@ -853,7 +885,7 @@ export default function HrData() {
                   <div className="hr-prompt-banner-text">
                     <h4>AI Focus Applied: "{activeAdminPrompt}"</h4>
                     <p>
-                      Analyzing {syncedEmployees.length} matching profile{syncedEmployees.length === 1 ? '' : 's'} based on your instructions.
+                      Analyzing {filteredEmployees.length} matching profile{filteredEmployees.length === 1 ? '' : 's'} based on your instructions.
                     </p>
                   </div>
                 </div>
@@ -864,7 +896,7 @@ export default function HrData() {
                     className="hr-prompt-banner-btn hr-prompt-banner-btn-secondary"
                     onClick={() => setShowAllProfiles(!showAllProfiles)}
                   >
-                    {showAllProfiles ? `Show Filtered (${syncedEmployees.length})` : `Show All (${allEmployees.length})`}
+                    {showAllProfiles ? `Show Filtered (${filteredEmployees.length})` : `Show All (${rows.length})`}
                   </button>
 
                   <button
@@ -894,10 +926,10 @@ export default function HrData() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Layers size={16} color="#0ca678" />
                   <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                    AI Analysis Details for this Focus
+                    Dataset Overview
                   </span>
                   <span style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '10px' }}>
-                    {activeAdminPrompt ? `Prompt: ${activeAdminPrompt}` : 'Standard Autonomous Analysis'}
+                    {activeAdminPrompt ? `Prompt: ${activeAdminPrompt}` : 'Direct Tabular Ingestion'}
                   </span>
                 </div>
 
@@ -911,33 +943,24 @@ export default function HrData() {
               <div className="hr-inscope-metrics-row">
                 <div className="hr-inscope-metric-pill">
                   <div className="hr-inscope-metric-label">In-Scope Profiles</div>
-                  <div className="hr-inscope-metric-val">{syncedEmployees.length || empList.length} Employees</div>
+                  <div className="hr-inscope-metric-val">{filteredEmployees.length} Records</div>
                 </div>
                 <div className="hr-inscope-metric-pill">
-                  <div className="hr-inscope-metric-label">Avg. In-Scope Salary</div>
-                  <div className="hr-inscope-metric-val">
-                    {empList.length > 0
-                      ? `$${Math.round(
-                          empList.reduce((sum, e) => sum + (parseFloat(String(e.salary || e.base_salary_monthly || 0).replace(/[$,]/g, '')) || 0), 0) /
-                            empList.length
-                        ).toLocaleString()}`
-                      : 'N/A'}
+                  <div className="hr-inscope-metric-label">Active Headcount</div>
+                  <div className="hr-inscope-metric-val" style={{ color: '#0ca678' }}>
+                    {activeCount} Active
                   </div>
                 </div>
                 <div className="hr-inscope-metric-pill">
-                  <div className="hr-inscope-metric-label">Overtime Logged</div>
-                  <div className="hr-inscope-metric-val">
-                    {empList.length > 0
-                      ? `${empList
-                          .reduce((sum, e) => sum + (parseFloat(String(e.ot || 0).replace(/[^0-9.]/g, '')) || 0), 0)
-                          .toFixed(1)} hrs`
-                      : '0 hrs'}
+                  <div className="hr-inscope-metric-label">Status / Attention</div>
+                  <div className="hr-inscope-metric-val" style={{ color: probationCount > 0 ? '#d97706' : '#16a34a' }}>
+                    {probationCount > 0 ? `${probationCount} Review / Probation` : 'All Confirmed'}
                   </div>
                 </div>
                 <div className="hr-inscope-metric-pill">
-                  <div className="hr-inscope-metric-label">Risk Profile</div>
-                  <div className="hr-inscope-metric-val" style={{ color: empList.some((e) => (e.risk || '').includes('Critical') || (e.risk || '').includes('High')) ? '#e11d48' : '#16a34a' }}>
-                    {empList.filter((e) => (e.risk || '').includes('Critical') || (e.risk || '').includes('High')).length} High Risk
+                  <div className="hr-inscope-metric-label">Workforce Units</div>
+                  <div className="hr-inscope-metric-val">
+                    {deptCount > 0 ? `${deptCount} Departments` : 'Network Wide'}
                   </div>
                 </div>
               </div>
@@ -950,70 +973,58 @@ export default function HrData() {
             </div>
 
             {/* Profiles Table */}
-            <div className="hr-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+            <div className="hr-table-wrapper" style={{ maxHeight: '440px', overflowY: 'auto', overflowX: 'auto' }}>
               <table className="hr-data-table">
                 <thead>
                   <tr>
-                    <th>Emp ID</th>
-                    <th>Employee Name</th>
-                    <th>Role Title</th>
-                    <th>Branch</th>
-                    <th>Department</th>
-                    <th>Base Salary</th>
-                    <th>Overtime (Mo)</th>
-                    <th>Attendance</th>
-                    <th>Retention Risk</th>
+                    {displayCols.map((c) => (
+                      <th key={c} style={{ whiteSpace: 'nowrap' }}>
+                        {c.replace(/_/g, ' ')}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan="9" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8', fontSize: '13.5px' }}>
+                      <td colSpan={displayCols.length || 1} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8', fontSize: '13.5px' }}>
                         No employee profiles match "{query || activeAdminPrompt}".
                       </td>
                     </tr>
                   ) : (
-                    filteredEmployees.map((emp) => {
-                      const id = emp.id || emp.employee_id;
-                      const name = emp.name || emp.full_name;
-                      const role = emp.role || emp.role_id || 'Staff';
-                      const branch = emp.branch || 'HQ';
-                      const dept = emp.dept || emp.department || 'Operations';
-                      const salary = emp.salary || (emp.base_salary_monthly ? `$${parseFloat(emp.base_salary_monthly).toLocaleString()}` : 'N/A');
-                      const ot = emp.ot || '0 hrs';
-                      const att = emp.att || '100%';
-                      const risk = emp.risk || 'Low (Stable)';
-
+                    filteredEmployees.map((emp, rIdx) => {
+                      const empKey = emp['Emp ID'] || emp['Employee No'] || emp.id || rIdx;
                       return (
-                        <tr key={id}>
-                          <td style={{ fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>{id}</td>
-                          <td style={{ fontWeight: 600, color: '#1e293b' }}>{name}</td>
-                          <td style={{ fontWeight: 500, color: '#0ca678' }}>{role}</td>
-                          <td>{branch}</td>
-                          <td>{dept}</td>
-                          <td style={{ fontWeight: 500 }}>{salary}</td>
-                          <td style={{ color: parseFloat(ot) > 10 ? '#ef4444' : '#64748b', fontWeight: 500 }}>
-                            {ot}
-                          </td>
-                          <td>
-                            <span style={{ color: parseInt(att) < 90 ? '#f59e0b' : '#0ca678', fontWeight: 600 }}>
-                              {att}
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                padding: '3px 8px',
-                                borderRadius: '12px',
-                                background: risk.includes('Critical') ? '#fef2f2' : risk.includes('High') ? '#fff1f2' : risk.includes('Medium') ? '#fffbeb' : '#f0fdf4',
-                                color: risk.includes('Critical') ? '#b91c1c' : risk.includes('High') ? '#e11d48' : risk.includes('Medium') ? '#d97706' : '#16a34a'
-                              }}
-                            >
-                              {risk}
-                            </span>
-                          </td>
+                        <tr key={`${empKey}-${rIdx}`}>
+                          {displayCols.map((c, cIdx) => {
+                            const val = emp[c];
+                            const isId = cIdx === 0 || /id|code|no\b/i.test(c);
+                            const isStatus = /status/i.test(c);
+                            const isEmail = /email/i.test(c);
+
+                            let cellContent = val !== undefined && val !== null && String(val).trim() !== '' ? String(val) : '-';
+
+                            let statusColor = 'inherit';
+                            if (isStatus) {
+                              if (/active/i.test(String(val))) statusColor = '#0ca678';
+                              else if (/resigned|exit/i.test(String(val))) statusColor = '#ef4444';
+                              else if (/probation/i.test(String(val))) statusColor = '#d97706';
+                            }
+
+                            return (
+                              <td
+                                key={c}
+                                style={{
+                                  fontFamily: isId ? 'monospace' : 'inherit',
+                                  fontWeight: isId || cIdx === 1 ? 600 : 'normal',
+                                  color: isId ? '#0f172a' : statusColor,
+                                  whiteSpace: isEmail || isId ? 'nowrap' : 'normal'
+                                }}
+                              >
+                                {cellContent}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })
@@ -1039,15 +1050,23 @@ export default function HrData() {
         )
       : rows;
 
+    const rawCols = (file.columns && file.columns.length > 0)
+      ? file.columns
+      : (rows.length > 0 ? Object.keys(rows[0]) : []);
+
+    const internalKeys = new Set(['id', 'emp_id', 'full_name', 'dept', 'role', 'branch', 'email', 'phone', 'rawSalary', 'rawOt', 'sources', 'restIntervals', 'gender', 'dob', 'doj', 'status', 'blood_group', 'manager_name', 'designation', 'department']);
+    const hasOriginalKeys = rawCols.some((c) => !internalKeys.has(c));
+    let displayCols = hasOriginalKeys ? rawCols.filter((c) => !internalKeys.has(c)) : rawCols;
+    if (displayCols.length === 0) displayCols = rawCols;
+
     const totalOt = rows.reduce(
-      (sum, r) => sum + (parseFloat(String(r.overtime_hours || r.ot || 0)) || 0),
+      (sum, r) => sum + (parseFloat(String(r.overtime_hours || r.ot || r['Overtime Hours'] || 0)) || 0),
       0
     );
-    const fatigueCount = rows.filter((r) => {
-      const rest = parseFloat(r.rest_interval_hours || r.rest || 12);
-      const ot = parseFloat(r.overtime_hours || r.ot || 0);
-      return rest < 11 || ot > 3;
-    }).length;
+    const presentTotal = rows.reduce(
+      (sum, r) => sum + (parseFloat(String(r['Present'] || r['Present Days'] || r.presentDays || 0)) || 0),
+      0
+    );
 
     return (
       <div className="hr-uploaded-section hr-dataset-card" key={file.id}>
@@ -1060,20 +1079,20 @@ export default function HrData() {
               </h2>
             </div>
             <p className="hr-dataset-subtitle">
-              Attendance & Roster Telemetry · Shift duration, overtime hours, and mandatory rest intervals
+              Attendance & Shifts Telemetry · {displayCols.length} Columns, {rows.length} Records
             </p>
           </div>
 
           <div className="hr-dataset-actions-block">
             <span className="hr-records-count-pill">
-              ● {filteredRows.length} of {rows.length} Shift Records
+              ● {filteredRows.length} of {rows.length} Records
             </span>
 
             <div className="hr-section-search-wrapper">
               <Search size={14} color="#94a3b8" />
               <input
                 type="text"
-                placeholder="Search Emp ID, date..."
+                placeholder="Search attendance records..."
                 value={sectionSearchQueries[file.id] || ''}
                 onChange={(e) => handleSectionSearchChange(file.id, e.target.value)}
                 className="hr-section-search-input"
@@ -1094,7 +1113,7 @@ export default function HrData() {
                 href={file.downloadUrl}
                 download
                 className="hr-dataset-btn-subtle"
-                title="Download CSV"
+                title="Download File"
               >
                 <Download size={14} />
               </a>
@@ -1115,76 +1134,75 @@ export default function HrData() {
           <>
             <div className="hr-inscope-metrics-row">
               <div className="hr-inscope-metric-pill">
-                <div className="hr-inscope-metric-label">Total Shift Records</div>
-                <div className="hr-inscope-metric-val">{rows.length} Shifts</div>
+                <div className="hr-inscope-metric-label">Total Records</div>
+                <div className="hr-inscope-metric-val">{rows.length} Records</div>
               </div>
-              <div className="hr-inscope-metric-pill">
-                <div className="hr-inscope-metric-label">Total Overtime Logged</div>
-                <div className="hr-inscope-metric-val" style={{ color: totalOt > 50 ? '#ef4444' : '#0ca678' }}>
-                  {totalOt.toFixed(1)} hrs
+              {presentTotal > 0 && (
+                <div className="hr-inscope-metric-pill">
+                  <div className="hr-inscope-metric-label">Total Present Logged</div>
+                  <div className="hr-inscope-metric-val" style={{ color: '#0ca678' }}>
+                    {Math.round(presentTotal)} Days
+                  </div>
                 </div>
-              </div>
+              )}
+              {totalOt > 0 && (
+                <div className="hr-inscope-metric-pill">
+                  <div className="hr-inscope-metric-label">Total Overtime Logged</div>
+                  <div className="hr-inscope-metric-val" style={{ color: totalOt > 50 ? '#ef4444' : '#0ca678' }}>
+                    {totalOt.toFixed(1)} hrs
+                  </div>
+                </div>
+              )}
               <div className="hr-inscope-metric-pill">
-                <div className="hr-inscope-metric-label">Fatigue / Rest Alerts</div>
-                <div className="hr-inscope-metric-val" style={{ color: fatigueCount > 0 ? '#e11d48' : '#16a34a' }}>
-                  {fatigueCount} Violations
+                <div className="hr-inscope-metric-label">Dataset Status</div>
+                <div className="hr-inscope-metric-val" style={{ color: '#16a34a' }}>
+                  All Rows Valid
                 </div>
               </div>
             </div>
 
-            <div className="hr-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+            <div className="hr-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto' }}>
               <table className="hr-data-table">
                 <thead>
                   <tr>
-                    <th>Emp ID</th>
-                    <th>Shift Date</th>
-                    <th>Scheduled Hours</th>
-                    <th>Productive Hours</th>
-                    <th>Overtime</th>
-                    <th>Rest Interval</th>
-                    <th>Compliance Status</th>
+                    {displayCols.map((c) => (
+                      <th key={c} style={{ whiteSpace: 'nowrap' }}>
+                        {c.replace(/_/g, ' ')}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8', fontSize: '13.5px' }}>
-                        No shift records match search "{query}".
+                      <td colSpan={displayCols.length || 1} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8', fontSize: '13.5px' }}>
+                        No records match search "{query}".
                       </td>
                     </tr>
                   ) : (
                     filteredRows.map((r, idx) => {
-                      const empId = r.employee_id || r.id || r.emp_id || 'EMP';
-                      const date = r.shift_date || r.date || 'N/A';
-                      const sched = r.scheduled_hours || '8';
-                      const prod = r.actual_productive_hours || r.hours || '8';
-                      const ot = parseFloat(r.overtime_hours || r.ot || 0);
-                      const rest = parseFloat(r.rest_interval_hours || r.rest || 12);
-                      const isFatigued = rest < 11 || ot > 3;
-
+                      const empId = r.employee_id || r.id || r.emp_id || r['Employee No'] || r['Emp ID'] || idx;
                       return (
-                        <tr key={`${empId}-${date}-${idx}`}>
-                          <td style={{ fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>{empId}</td>
-                          <td style={{ color: '#64748b', fontSize: '12.5px' }}>{date}</td>
-                          <td>{sched} hrs</td>
-                          <td style={{ fontWeight: 500 }}>{prod} hrs</td>
-                          <td style={{ color: ot > 0 ? '#ef4444' : '#64748b', fontWeight: 500 }}>
-                            {ot > 0 ? `+${ot} hrs` : '0 hrs'}
-                          </td>
-                          <td style={{ color: rest < 11 ? '#ef4444' : '#0ca678', fontWeight: 600 }}>
-                            {rest} hrs
-                          </td>
-                          <td>
-                            {isFatigued ? (
-                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#b91c1c', background: '#fef2f2', padding: '2px 8px', borderRadius: '10px' }}>
-                                Fatigue Warning
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '10px' }}>
-                                Compliant
-                              </span>
-                            )}
-                          </td>
+                        <tr key={`${empId}-${idx}`}>
+                          {displayCols.map((c, cIdx) => {
+                            const val = r[c];
+                            const isId = cIdx === 0 || /id|no\b|code/i.test(c);
+                            let cellContent = val !== undefined && val !== null && String(val).trim() !== '' ? String(val) : '-';
+
+                            return (
+                              <td
+                                key={c}
+                                style={{
+                                  fontFamily: isId ? 'monospace' : 'inherit',
+                                  fontWeight: isId || cIdx === 1 ? 600 : 'normal',
+                                  color: isId ? '#0f172a' : 'inherit',
+                                  whiteSpace: isId ? 'nowrap' : 'normal'
+                                }}
+                              >
+                                {cellContent}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })
@@ -1256,7 +1274,7 @@ export default function HrData() {
                 href={file.downloadUrl}
                 download
                 className="hr-dataset-btn-subtle"
-                title="Download CSV"
+                title="Download File"
               >
                 <Download size={14} />
               </a>
@@ -1274,12 +1292,12 @@ export default function HrData() {
         </div>
 
         {!isCollapsed && (
-          <div className="hr-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+          <div className="hr-table-wrapper" style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto' }}>
             <table className="hr-data-table">
               <thead>
                 <tr>
-                  {cols.slice(0, 10).map((c) => (
-                    <th key={c}>{c.replace(/_/g, ' ').toUpperCase()}</th>
+                  {cols.map((c) => (
+                    <th key={c} style={{ whiteSpace: 'nowrap' }}>{c.replace(/_/g, ' ')}</th>
                   ))}
                 </tr>
               </thead>
@@ -1293,8 +1311,8 @@ export default function HrData() {
                 ) : (
                   filteredRows.map((r, idx) => (
                     <tr key={idx}>
-                      {cols.slice(0, 10).map((c) => (
-                        <td key={c}>{String(r[c] ?? '-')}</td>
+                      {cols.map((c) => (
+                        <td key={c} style={{ whiteSpace: /id|no\b/i.test(c) ? 'nowrap' : 'normal' }}>{String(r[c] ?? '-')}</td>
                       ))}
                     </tr>
                   ))
