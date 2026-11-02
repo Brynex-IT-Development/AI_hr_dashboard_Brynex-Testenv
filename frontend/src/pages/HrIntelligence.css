@@ -1765,127 +1765,107 @@
 }
 
 /* =========================================================================
-   Live Claude AI Synthesis Banner & Polling Feedback
+   High-Level Human Loading UI (ChatGPT & Claude aesthetic)
 ========================================================================= */
-.hr-ai-analyzing-live-banner {
-  background: linear-gradient(135deg, rgba(236, 253, 245, 0.98) 0%, rgba(209, 250, 229, 0.95) 100%);
-  border: 1px solid #10b981;
-  border-left: 4px solid #059669;
-  border-radius: 12px;
-  padding: 12px 18px;
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.12);
-  animation: bannerFadeIn 0.3s ease;
+
+/* Top sleek streaming progress bar */
+.human-streaming-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6, #3b82f6, #ec4899, #6366f1);
+  background-size: 200% 100%;
+  animation: humanStreamBar 1.6s infinite linear;
+  z-index: 50;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
 }
 
-@keyframes bannerFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes humanStreamBar {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-.hr-ai-analyzing-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 1;
-}
-
-.hr-ai-analyzing-pulse-orb {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #059669;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.6);
-  animation: pulseOrb 2s infinite cubic-bezier(0.66, 0, 0, 1);
-}
-
-@keyframes pulseOrb {
-  to {
-    box-shadow: 0 0 0 12px rgba(5, 150, 105, 0);
-  }
-}
-
-.hr-ai-orb-icon {
-  animation: spinSlow 8s linear infinite;
-}
-
-@keyframes spinSlow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.hr-ai-analyzing-headline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  color: #064e3b;
-  font-weight: 700;
-  letter-spacing: -0.1px;
-}
-
-.hr-ai-live-badge {
+/* Subtle, human Claude-inspired status pill */
+.human-status-pill {
   display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: #047857;
-  color: #ffffff;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-
-.hr-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #34d399;
-  display: inline-block;
-  animation: liveBlink 1.2s infinite ease-in-out;
-}
-
-@keyframes liveBlink {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.85); }
-}
-
-.hr-ai-analyzing-sub {
-  margin: 3px 0 0 0;
-  font-size: 12px;
-  color: #065f46;
-  line-height: 1.4;
-}
-
-.hr-ai-analyzing-right {
-  display: flex;
   align-items: center;
   gap: 8px;
   background: #ffffff;
-  border: 1px solid #a7f3d0;
-  border-radius: 20px;
-  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 12px;
   font-size: 12px;
-  font-weight: 600;
-  color: #065f46;
-  white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-weight: 500;
+  color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: humanFadeIn 0.25s ease-out;
+}
+
+.human-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7c3aed;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5);
+  animation: humanPulseDot 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes humanPulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(124, 58, 237, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+}
+
+.human-status-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  letter-spacing: -0.1px;
+}
+
+/* High-fidelity skeleton screens (matching ChatGPT & Claude) */
+.human-skeleton-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: humanShimmer 1.7s infinite ease-in-out;
+  display: block;
+}
+
+@keyframes humanShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.human-skeleton-card {
+  pointer-events: none;
+  user-select: none;
+  animation: humanFadeIn 0.3s ease;
+}
+
+@keyframes humanFadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.human-detail-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #475569;
 }
 
 .hr-spin-animation {
   animation: spin 1s linear infinite;
-  color: #059669;
 }
 
 @keyframes spin {

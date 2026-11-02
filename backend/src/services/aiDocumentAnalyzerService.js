@@ -402,8 +402,25 @@ export const runClaudeApiAnalysis = async ({ stores = [], employees = [], adminP
     };
   });
 
-  // Extract representative staff members from real employees
-  const staffSample = employees.slice(0, 35).map((e) => ({
+  // Sort and filter stores to keep prompt compact and fast: prioritize prompt-matching stores first
+  const pLower = (adminPrompt || '').toLowerCase();
+  const sortedStores = [...storeSummaries].sort((a, b) => {
+    const aMatch = pLower && (a.name.toLowerCase().includes(pLower) || pLower.includes(a.name.toLowerCase()));
+    const bMatch = pLower && (b.name.toLowerCase().includes(pLower) || pLower.includes(b.name.toLowerCase()));
+    if (aMatch && !bMatch) return -1;
+    if (!aMatch && bMatch) return 1;
+    return 0;
+  });
+  const compactStores = sortedStores.slice(0, 8);
+
+  // Extract compact representative staff sample focused on relevant branches
+  const compactStaff = employees
+    .filter((e) => {
+      const b = (e.summary?.workingBranch || '').toLowerCase();
+      return !pLower || b.includes(pLower) || pLower.includes(b);
+    })
+    .slice(0, 10);
+  const staffSample = (compactStaff.length > 0 ? compactStaff : employees.slice(0, 8)).map((e) => ({
     name: e.summary?.name || null,
     id: e.summary?.empId || null,
     role: e.summary?.designation || null,
@@ -411,17 +428,16 @@ export const runClaudeApiAnalysis = async ({ stores = [], employees = [], adminP
     branch: e.summary?.workingBranch || null,
     target: e.salesAttributions?.targets?.[0]?.targets?.targetAmount || 0,
     sales: e.salesAttributions?.dappr?.[0]?.attribution?.netSales || 0,
-    assessmentScore: e.learning?.assessmentAttempts?.[0]?.percentage ?? e.learning?.assessmentAttempts?.[0]?.score ?? null,
-    trainingStatus: e.learning?.trainingProgress?.[0]?.status || null
+    assessmentScore: e.learning?.assessmentAttempts?.[0]?.percentage ?? e.learning?.assessmentAttempts?.[0]?.score ?? null
   }));
 
   const prompt = `You are the Chief AI Retail Workforce & Management Intelligence Brain for Brynex One AI.
-You are evaluating LIVE LMS retail telemetry across ${stores.length} store branches and ${employees.length} employee profiles.
+You are evaluating LIVE LMS retail telemetry across key store branches and employee profiles.
 
-EXTERNAL RETAIL TELEMETRY (${stores.length} STORES):
-${JSON.stringify(storeSummaries, null, 2)}
+EXTERNAL RETAIL TELEMETRY (${compactStores.length} FOCUSED STORES):
+${JSON.stringify(compactStores, null, 2)}
 
-EMPLOYEE PROFILES TELEMETRY (Sample of ${staffSample.length} frontline consultants & staff):
+EMPLOYEE PROFILES TELEMETRY (Sample of ${staffSample.length} staff):
 ${JSON.stringify(staffSample, null, 2)}
 
 USER CUSTOM PROMPT / INSTRUCTION:
@@ -525,7 +541,7 @@ Respond ONLY with a single valid, parseable JSON object matching this exact sche
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8192,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     })
@@ -544,7 +560,23 @@ Respond ONLY with a single valid, parseable JSON object matching this exact sche
     cleanJsonText = cleanJsonText.substring(firstBrace, lastBrace + 1);
   }
 
-  let parsedAnalysis = JSON.parse(cleanJsonText);
+  let parsedAnalysis = null;
+  try {
+    parsedAnalysis = JSON.parse(cleanJsonText);
+  } catch (parseErr) {
+    const lastItemIdx = cleanJsonText.lastIndexOf('},\n    {');
+    if (lastItemIdx !== -1) {
+      try {
+        const repaired = cleanJsonText.substring(0, lastItemIdx + 1) + '\n  ]\n}';
+        parsedAnalysis = JSON.parse(repaired);
+      } catch (_) {
+        throw parseErr;
+      }
+    } else {
+      throw parseErr;
+    }
+  }
+
   parsedAnalysis.analyzedAt = new Date().toISOString();
   parsedAnalysis.adminPromptApplied = adminPrompt || null;
 

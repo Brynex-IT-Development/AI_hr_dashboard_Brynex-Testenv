@@ -16,6 +16,7 @@ let cachedEnterpriseAnalytics = null;
 let activeAdminPrompt = '';
 let activeCustomRules = null;
 let isAiAnalyzingGlobal = false;
+const promptAnalysisCache = new Map();
 
 const UPLOADS_DIR = fs.existsSync(path.join(process.cwd(), 'uploads'))
   ? path.join(process.cwd(), 'uploads')
@@ -545,10 +546,11 @@ export const runCustomAiAnalysis = async (req, res) => {
     activeAdminPrompt = (adminPrompt || '').trim();
     activeCustomRules = customRules;
 
-    await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
+    const cacheKey = activeAdminPrompt.toLowerCase();
 
     // If prompt is empty and no uploaded files exist, return clean idle baseline immediately
     if (!activeAdminPrompt && uploadedFilesStore.length === 0) {
+      await recomputeAnalytics('', activeCustomRules);
       isAiAnalyzingGlobal = false;
       return res.json({
         status: 'success',
@@ -561,19 +563,43 @@ export const runCustomAiAnalysis = async (req, res) => {
       });
     }
 
-    isAiAnalyzingGlobal = true;
-
-    res.json({
-      status: 'success',
-      data: latestAnalysis,
-      isAiAnalyzing: true,
-      activePrompt: activeAdminPrompt,
-      customRules: activeCustomRules,
-      employeesCount: cachedSyncedEmployees.length,
-      totalEmployeesCount: allSyncedEmployees.length
-    });
+    // Check fast in-memory cache for repeated prompts (instant 0ms response)
+    if (activeAdminPrompt && uploadedFilesStore.length === 0 && promptAnalysisCache.has(cacheKey)) {
+      const cachedResult = promptAnalysisCache.get(cacheKey);
+      latestAnalysis = cachedResult;
+      cachedApiAnalysis = cachedResult;
+      isAiAnalyzingGlobal = false;
+      return res.json({
+        status: 'success',
+        data: latestAnalysis,
+        isAiAnalyzing: false,
+        activePrompt: activeAdminPrompt,
+        customRules: activeCustomRules,
+        employeesCount: cachedSyncedEmployees.length,
+        totalEmployeesCount: allSyncedEmployees.length
+      });
+    }
 
     if (uploadedFilesStore.length > 0) {
+      await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
+      const instantCsv = await analyzeMultiFileHrData({
+        files: uploadedFilesStore,
+        customRules: activeCustomRules,
+        adminPrompt: activeAdminPrompt
+      });
+      latestAnalysis = mergeDualLayerAnalysis(instantCsv, cachedApiAnalysis);
+      isAiAnalyzingGlobal = true;
+
+      res.json({
+        status: 'success',
+        data: latestAnalysis,
+        isAiAnalyzing: true,
+        activePrompt: activeAdminPrompt,
+        customRules: activeCustomRules,
+        employeesCount: cachedSyncedEmployees.length,
+        totalEmployeesCount: allSyncedEmployees.length
+      });
+
       runClaudeDocumentAnalysis({
         files: uploadedFilesStore,
         customRules: activeCustomRules,
@@ -587,38 +613,57 @@ export const runCustomAiAnalysis = async (req, res) => {
       }).finally(() => {
         isAiAnalyzingGlobal = false;
       });
-    } else {
-      // Live Retail LMS API Telemetry synthesis via Claude
-      Promise.all([fetchAllStoresOverview(), fetchAllEmployeesOverview()])
-        .then(([stores, employees]) => {
-          return runClaudeApiAnalysis({
-            stores,
-            employees,
-            adminPrompt: activeAdminPrompt,
-            customRules: activeCustomRules
-          });
-        })
-        .then((apiAiAnalysis) => {
-          if (apiAiAnalysis && apiAiAnalysis.attentionItems && apiAiAnalysis.attentionItems.length > 0) {
-            latestAnalysis = {
-              ...latestAnalysis,
-              healthScore: apiAiAnalysis.healthScore ? `${apiAiAnalysis.healthScore}%` : latestAnalysis.healthScore,
-              healthStatus: apiAiAnalysis.healthStatus || latestAnalysis.healthStatus,
-              attentionSummary: apiAiAnalysis.attentionSummary || latestAnalysis.attentionSummary,
-              kpiMetrics: apiAiAnalysis.kpiMetrics || latestAnalysis.kpiMetrics,
-              attentionItems: apiAiAnalysis.attentionItems,
-              adminPromptApplied: activeAdminPrompt
-            };
-            cachedApiAnalysis = latestAnalysis;
-          }
-        })
-        .catch((aiErr) => {
-          console.warn('Claude API analysis fallback to rule correlator:', aiErr.message);
-        })
-        .finally(() => {
-          isAiAnalyzingGlobal = false;
-        });
+      return;
     }
+
+    // Pure Real Data Fetching & Live Claude AI Synthesis (Zero Mock/Hardcoded Data)
+    isAiAnalyzingGlobal = true;
+
+    // Send immediate response so frontend triggers the high-level human loading UI
+    res.json({
+      status: 'success',
+      data: latestAnalysis,
+      isAiAnalyzing: true,
+      activePrompt: activeAdminPrompt,
+      customRules: activeCustomRules,
+      employeesCount: cachedSyncedEmployees.length,
+      totalEmployeesCount: allSyncedEmployees.length
+    });
+
+    // 1. Fetch live LMS store and employee datasets from external APIs / cache
+    const [stores, employees] = await Promise.all([
+      fetchAllStoresOverview(),
+      fetchAllEmployeesOverview()
+    ]);
+
+    // 2. Perform live, dynamic Claude AI synthesis directly on the real store and staff records
+    runClaudeApiAnalysis({
+      stores,
+      employees,
+      adminPrompt: activeAdminPrompt,
+      customRules: activeCustomRules
+    })
+      .then((apiAiAnalysis) => {
+        if (apiAiAnalysis && apiAiAnalysis.attentionItems && apiAiAnalysis.attentionItems.length > 0) {
+          latestAnalysis = {
+            ...latestAnalysis,
+            healthScore: apiAiAnalysis.healthScore ? `${apiAiAnalysis.healthScore}%` : latestAnalysis.healthScore,
+            healthStatus: apiAiAnalysis.healthStatus || latestAnalysis.healthStatus,
+            attentionSummary: apiAiAnalysis.attentionSummary || latestAnalysis.attentionSummary,
+            kpiMetrics: apiAiAnalysis.kpiMetrics || latestAnalysis.kpiMetrics,
+            attentionItems: apiAiAnalysis.attentionItems,
+            adminPromptApplied: activeAdminPrompt
+          };
+          cachedApiAnalysis = latestAnalysis;
+          promptAnalysisCache.set(cacheKey, latestAnalysis);
+        }
+      })
+      .catch((aiErr) => {
+        console.warn('Claude API live synthesis error:', aiErr.message);
+      })
+      .finally(() => {
+        isAiAnalyzingGlobal = false;
+      });
 
     return;
   } catch (error) {

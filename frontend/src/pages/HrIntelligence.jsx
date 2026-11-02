@@ -55,6 +55,109 @@ import {
 import FormattedChatMessage from '../components/FormattedChatMessage';
 import './HrIntelligence.css';
 
+// ChatGPT & Claude inspired Human Skeleton Loaders
+function SkeletonBlock({ width = '100%', height = '16px', borderRadius = '6px', style = {} }) {
+  return (
+    <div
+      className="human-skeleton-shimmer"
+      style={{
+        width,
+        height,
+        borderRadius,
+        ...style
+      }}
+    />
+  );
+}
+
+function SkeletonKpiCard() {
+  return (
+    <div className="hr-kpi-card human-skeleton-card">
+      <div className="hr-kpi-top">
+        <SkeletonBlock width="26px" height="26px" borderRadius="7px" />
+        <SkeletonBlock width="80px" height="12px" />
+      </div>
+      <div style={{ marginTop: '14px', marginBottom: '10px' }}>
+        <SkeletonBlock width="55px" height="26px" borderRadius="4px" />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <SkeletonBlock width="110px" height="11px" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonIssueCard() {
+  return (
+    <div className="hr-issue-card human-skeleton-card" style={{ cursor: 'default' }}>
+      <div className="hr-issue-card-top" style={{ marginBottom: '10px' }}>
+        <SkeletonBlock width="70px" height="20px" borderRadius="999px" />
+        <SkeletonBlock width="90px" height="18px" borderRadius="6px" />
+      </div>
+      <div style={{ marginBottom: '8px' }}>
+        <SkeletonBlock width="85%" height="16px" borderRadius="4px" />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+        <SkeletonBlock width="100%" height="12px" />
+        <SkeletonBlock width="65%" height="12px" />
+      </div>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <SkeletonBlock width="75px" height="13px" />
+        <SkeletonBlock width="65px" height="13px" />
+        <SkeletonBlock width="70px" height="13px" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonDetailCard() {
+  return (
+    <div className="hr-detail-card human-skeleton-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <SkeletonBlock width="85px" height="28px" borderRadius="8px" />
+        <SkeletonBlock width="120px" height="24px" borderRadius="6px" />
+      </div>
+      <div style={{ marginBottom: '10px' }}>
+        <SkeletonBlock width="70%" height="22px" borderRadius="5px" />
+      </div>
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '22px' }}>
+        <SkeletonBlock width="95px" height="14px" />
+        <SkeletonBlock width="110px" height="14px" />
+        <SkeletonBlock width="85px" height="14px" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '22px' }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="60px" height="11px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="45px" height="20px" style={{ marginBottom: '6px' }} />
+            <SkeletonBlock width="75px" height="10px" />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: '18px' }}>
+        <SkeletonBlock width="120px" height="15px" style={{ marginBottom: '10px' }} />
+        <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+          <SkeletonBlock width="90%" height="13px" style={{ marginBottom: '6px' }} />
+          <SkeletonBlock width="75%" height="13px" />
+        </div>
+      </div>
+      <div>
+        <SkeletonBlock width="130px" height="15px" style={{ marginBottom: '10px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="40%" height="14px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="85%" height="12px" />
+          </div>
+          <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="35%" height="14px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="80%" height="12px" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HrIntelligence() {
   const navigate = useNavigate();
   const [selectedIssueId, setSelectedIssueId] = useState(null);
@@ -260,6 +363,8 @@ export default function HrIntelligence() {
   const resolvedAttentionItems = (liveAnalysis?.attentionItems && Array.isArray(liveAnalysis.attentionItems))
     ? liveAnalysis.attentionItems
     : [];
+
+  const isWaitingForAi = isLoadingAnalysis || (isAiAnalyzing && resolvedAttentionItems.length === 0);
 
   const resolvedKpiMetrics = (liveAnalysis?.kpiMetrics && Array.isArray(liveAnalysis.kpiMetrics) && liveAnalysis.kpiMetrics.length > 0)
     ? liveAnalysis.kpiMetrics.map((kpi) => {
@@ -546,7 +651,12 @@ export default function HrIntelligence() {
   };
 
   return (
-    <div className="hr-page-container">
+    <div className="hr-page-container" style={{ position: 'relative' }}>
+      {/* Sleek Top Streaming Progress Line (ChatGPT / Claude / Linear aesthetic) */}
+      {(isLoadingAnalysis || isSubmittingPrompt || isAiAnalyzing) && (
+        <div className="human-streaming-progress-bar" />
+      )}
+
       {/* 1. Page Header Row: Welcome Greeting on Left, Date & Export Actions on Right */}
       <div className="hr-header-greeting-row">
         <div className="hr-welcome-greeting-section">
@@ -610,34 +720,6 @@ export default function HrIntelligence() {
         </div>
       )}
 
-      {/* Live Claude AI Background Synthesis Progress Banner */}
-      {isAiAnalyzing && (
-        <div className="hr-ai-analyzing-live-banner">
-          <div className="hr-ai-analyzing-left">
-            <div className="hr-ai-analyzing-pulse-orb">
-              <Sparkles size={16} className="hr-ai-orb-icon" />
-            </div>
-            <div>
-              <div className="hr-ai-analyzing-headline">
-                <span>Claude AI Deep Intelligence Synthesis in Progress</span>
-                <span className="hr-ai-live-badge">
-                  <span className="hr-live-dot"></span>
-                  LIVE ANALYZING
-                </span>
-              </div>
-              <p className="hr-ai-analyzing-sub">
-                Correlating workforce records, shift rest intervals, and management impact projections across connected datasets. Diagnostics and recommendations will update automatically once synthesis is complete.
-              </p>
-            </div>
-          </div>
-          <div className="hr-ai-analyzing-right">
-            <Loader2 size={15} className="hr-spin-animation" />
-            <span>Synthesizing Telemetry...</span>
-          </div>
-        </div>
-      )}
-
-
       {/* Top Banner Row: Live API Intelligence Prompt Engine + HR Health Score Card */}
       <div className="hr-prompt-and-health-row">
         {/* Left: Executive AI Live API Telemetry Prompt Bar */}
@@ -654,24 +736,34 @@ export default function HrIntelligence() {
                 </div>
               </div>
             </div>
-            {activeApiPrompt && (
-              <div className="hr-api-active-badge-wrap">
-                <span className="hr-api-active-badge">
-                  <span className="hr-live-dot" />
-                  Active Focus: "{activeApiPrompt}"
-                </span>
-                <button
-                  type="button"
-                  className="hr-api-reset-prompt-btn"
-                  onClick={handleResetApiPrompt}
-                  title="Reset to default unprompted telemetry"
-                  disabled={isSubmittingPrompt}
-                >
-                  <RotateCw size={11} />
-                  <span>Reset View</span>
-                </button>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {isAiAnalyzing && (
+                <div className="human-status-pill">
+                  <span className="human-pulse-dot" />
+                  <span className="human-status-text">
+                    {activeApiPrompt ? `Synthesizing "${activeApiPrompt}"` : 'Synthesizing live telemetry'}
+                  </span>
+                </div>
+              )}
+              {activeApiPrompt && (
+                <div className="hr-api-active-badge-wrap">
+                  <span className="hr-api-active-badge">
+                    <span className="hr-live-dot" />
+                    Active Focus: "{activeApiPrompt}"
+                  </span>
+                  <button
+                    type="button"
+                    className="hr-api-reset-prompt-btn"
+                    onClick={handleResetApiPrompt}
+                    title="Reset to default unprompted telemetry"
+                    disabled={isSubmittingPrompt}
+                  >
+                    <RotateCw size={11} />
+                    <span>Reset View</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <form
@@ -777,52 +869,69 @@ export default function HrIntelligence() {
 
         {/* Right: HR Health Score Card */}
         <div className="hr-health-score-card">
-          <div className="hr-health-header">
-            <span className="hr-health-title">HR Health Score</span>
-            <span className="hr-health-badge">
-              {resolvedAttentionItems.length > 0
-                ? (liveAnalysis?.healthStatus || 'Needs Attention')
-                : (analysisError ? 'API Error' : 'Standby')}
-            </span>
-          </div>
-          <div className="hr-health-value">
-            {resolvedAttentionItems.length > 0 && liveAnalysis?.healthScore && liveAnalysis.healthScore !== 'N/A'
-              ? (String(liveAnalysis.healthScore).includes('%') ? liveAnalysis.healthScore : `${liveAnalysis.healthScore}%`)
-              : (analysisError ? 'ERR' : '—')}
-          </div>
-          <div className="hr-health-footer">
-            <TrendingUp size={14} />
-            <span>
-              {analysisError
-                ? 'API connection failure'
-                : resolvedAttentionItems.length > 0
-                  ? `${resolvedAttentionItems.length} area${resolvedAttentionItems.length === 1 ? '' : 's'} need attention`
-                  : 'Awaiting prompt analysis'}
-            </span>
-          </div>
+          {isWaitingForAi ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <SkeletonBlock width="95px" height="13px" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                <SkeletonBlock width="60px" height="20px" borderRadius="999px" style={{ background: 'rgba(255,255,255,0.2)' }} />
+              </div>
+              <SkeletonBlock width="75px" height="34px" borderRadius="6px" style={{ background: 'rgba(255,255,255,0.25)', margin: '4px 0' }} />
+              <SkeletonBlock width="140px" height="12px" style={{ background: 'rgba(255,255,255,0.18)' }} />
+            </div>
+          ) : (
+            <>
+              <div className="hr-health-header">
+                <span className="hr-health-title">HR Health Score</span>
+                <span className="hr-health-badge">
+                  {resolvedAttentionItems.length > 0
+                    ? (liveAnalysis?.healthStatus || 'Needs Attention')
+                    : (analysisError ? 'API Error' : 'Standby')}
+                </span>
+              </div>
+              <div className="hr-health-value">
+                {resolvedAttentionItems.length > 0 && liveAnalysis?.healthScore && liveAnalysis.healthScore !== 'N/A'
+                  ? (String(liveAnalysis.healthScore).includes('%') ? liveAnalysis.healthScore : `${liveAnalysis.healthScore}%`)
+                  : (analysisError ? 'ERR' : '—')}
+              </div>
+              <div className="hr-health-footer">
+                <TrendingUp size={14} />
+                <span>
+                  {analysisError
+                    ? 'API connection failure'
+                    : resolvedAttentionItems.length > 0
+                      ? `${resolvedAttentionItems.length} area${resolvedAttentionItems.length === 1 ? '' : 's'} need attention`
+                      : 'Awaiting prompt analysis'}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Row of 5 Metric KPI Cards */}
       <div className="hr-metrics-grid">
-        {resolvedKpiMetrics.map((kpi, idx) => (
-          <div key={kpi.id || idx} className="hr-kpi-card">
-            <div className="hr-kpi-top">
-              <div className={`hr-kpi-icon-pill ${kpi.colorClass || 'hr-kpi-icon-blue'}`}>
-                {kpi.icon || <Activity size={13} />}
+        {isWaitingForAi ? (
+          [1, 2, 3, 4, 5].map((idx) => <SkeletonKpiCard key={idx} />)
+        ) : (
+          resolvedKpiMetrics.map((kpi, idx) => (
+            <div key={kpi.id || idx} className="hr-kpi-card">
+              <div className="hr-kpi-top">
+                <div className={`hr-kpi-icon-pill ${kpi.colorClass || 'hr-kpi-icon-blue'}`}>
+                  {kpi.icon || <Activity size={13} />}
+                </div>
+                <span className="hr-kpi-label">{kpi.title}</span>
               </div>
-              <span className="hr-kpi-label">{kpi.title}</span>
-            </div>
-            <div className="hr-kpi-val">{kpi.value}</div>
-            <div className="hr-kpi-trend">
-              <div className="hr-kpi-trend-left">
-                <ArrowUpRight size={13} />
-                <span>{kpi.trend || '3%'}</span>
+              <div className="hr-kpi-val">{kpi.value}</div>
+              <div className="hr-kpi-trend">
+                <div className="hr-kpi-trend-left">
+                  <ArrowUpRight size={13} />
+                  <span>{kpi.trend || '3%'}</span>
+                </div>
+                <span className="hr-kpi-trend-sub">vs last month</span>
               </div>
-              <span className="hr-kpi-trend-sub">vs last month</span>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* 3. Main Split Grid (Faithful to Figma layout) */}
@@ -891,7 +1000,13 @@ export default function HrIntelligence() {
 
           {/* List of Issue Cards */}
           <div className="hr-issue-cards-list">
-            {filteredItems.length === 0 ? (
+            {isWaitingForAi ? (
+              <>
+                <SkeletonIssueCard />
+                <SkeletonIssueCard />
+                <SkeletonIssueCard />
+              </>
+            ) : filteredItems.length === 0 ? (
               <div
                 className="hr-empty-state-card"
                 style={{
@@ -1008,7 +1123,9 @@ export default function HrIntelligence() {
         </div>
 
         {/* Right Column: Detailed Investigation View */}
-        {!selectedItem ? (
+        {isWaitingForAi ? (
+          <SkeletonDetailCard />
+        ) : !selectedItem ? (
           <div
             className="hr-detail-card"
             style={{
@@ -1056,9 +1173,9 @@ export default function HrIntelligence() {
               </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {isAiAnalyzing && (
-                  <span className="hr-detail-ai-analyzing-pill">
-                    <Loader2 size={11} className="hr-spin-animation" />
-                    <span>Claude AI Synthesizing...</span>
+                  <span className="human-detail-status-pill">
+                    <span className="human-pulse-dot" />
+                    <span>Enriching telemetry</span>
                   </span>
                 )}
                 <span className="hr-status-badge-outline" style={{ padding: '3px 12px' }}>
