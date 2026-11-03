@@ -9,7 +9,19 @@ const PORT = process.env.PORT || 5000;
 
 // Middlewares
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (
+      origin === process.env.CLIENT_URL ||
+      origin === 'http://localhost:5173' ||
+      origin === 'http://localhost:5000' ||
+      origin.endsWith('.vercel.app') ||
+      origin.includes('localhost')
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
 app.use(express.json());
