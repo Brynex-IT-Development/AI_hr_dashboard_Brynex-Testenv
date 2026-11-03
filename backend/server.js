@@ -8,20 +8,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middlewares
+const allowedOrigins = process.env.CLIENT_URL
+  ? (process.env.CLIENT_URL.includes(',') ? process.env.CLIENT_URL.split(',').map(o => o.trim()) : process.env.CLIENT_URL)
+  : true;
+
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (
-      origin === process.env.CLIENT_URL ||
-      origin === 'http://localhost:5173' ||
-      origin === 'http://localhost:5000' ||
-      origin.endsWith('.vercel.app') ||
-      origin.includes('localhost')
-    ) {
-      return callback(null, true);
-    }
-    return callback(null, true);
-  },
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
