@@ -86,49 +86,6 @@ export const parseUploadedFile = async (filePath, originalName) => {
 
     if (!rawMatrix || rawMatrix.length === 0) return [];
 
-<<<<<<< HEAD
-    // 1. Detect if sheet is a calendar/matrix attendance roster (e.g. Row 1-3: Month/Title, Row with staff/employee name and day columns)
-    const matrixHeaderRowIdx = rawMatrix.findIndex(
-      (r) => Array.isArray(r) && r.some((c) => /staff\s*name|employee\s*name|emp\s*name|^staff$|^employee$/i.test(String(c).trim()))
-    );
-
-    if (matrixHeaderRowIdx !== -1) {
-      const headerRow = rawMatrix[matrixHeaderRowIdx];
-      const nameColIdx = headerRow.findIndex((c) => /staff\s*name|employee\s*name|emp\s*name|^staff$|^employee$/i.test(String(c).trim()));
-      const extractedRows = [];
-
-      for (let i = matrixHeaderRowIdx + 1; i < rawMatrix.length; i++) {
-        const row = rawMatrix[i];
-        if (!row || !row[nameColIdx] || String(row[nameColIdx]).trim() === '') continue;
-        const staffName = String(row[nameColIdx]).trim();
-        if (/total|sum|average|day|sat|sun|mon|tue|wed|thr|fri/i.test(staffName)) continue;
-
-        let present = 0;
-        let absent = 0;
-        for (let j = 0; j < row.length; j++) {
-          if (j === nameColIdx) continue;
-          const mark = String(row[j] || '').toUpperCase().trim();
-          if (mark === 'P' || mark === 'PRESENT' || mark === '1') present++;
-          else if (mark === 'A' || mark === 'ABSENT' || mark === '0') absent++;
-        }
-
-        const totalMarked = present + absent;
-        const attendancePct = totalMarked > 0 ? Math.round((present / totalMarked) * 100) : 100;
-
-        extractedRows.push({
-          id: `EMP-${1000 + extractedRows.length + 1}`,
-          name: staffName,
-          department: null,
-          presentDays: present,
-          absentDays: absent,
-          attendance: `${attendancePct}%`,
-          status: attendancePct < 60 ? 'Exited' : 'Active'
-        });
-      }
-
-      if (extractedRows.length > 0) {
-        return extractedRows;
-=======
     // 1. Check if sheet is an actual Calendar Attendance Muster (has 10+ columns with day numbers 1..31)
     let dayRowIdx = -1;
     for (let r = 0; r < Math.min(rawMatrix.length, 6); r++) {
@@ -142,7 +99,6 @@ export const parseUploadedFile = async (filePath, originalName) => {
       if (dayCells.length >= 10) {
         dayRowIdx = r;
         break;
->>>>>>> ExelData
       }
     }
 
