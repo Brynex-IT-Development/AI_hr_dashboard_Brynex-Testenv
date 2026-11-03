@@ -83,29 +83,7 @@ export default function BusinessHealth() {
     );
   }
 
-  const priorities = healthData?.strategicPriorities || [
-    {
-      title: 'Workforce Roster & Shift Stabilization',
-      desc: 'Correlate shift logs and active headcount to optimize scheduling and prevent attrition.',
-      bg: '#eff6ff',
-      border: '#bfdbfe',
-      color: '#1e40af'
-    },
-    {
-      title: 'Branch Revenue & Productivity Alignment',
-      desc: 'Align compensation benchmarks with branch deal velocity to drive margin expansion.',
-      bg: '#f0fdf4',
-      border: '#bbf7d0',
-      color: '#166534'
-    },
-    {
-      title: 'Compliance & Rest Interval Monitoring',
-      desc: 'Maintain continuous automated monitoring of shift rest intervals to safeguard staff retention.',
-      bg: '#faf5ff',
-      border: '#e9d5ff',
-      color: '#6b21a8'
-    }
-  ];
+  const priorities = healthData?.strategicPriorities || [];
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>

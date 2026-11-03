@@ -13,6 +13,7 @@ import {
   runCustomAiAnalysis,
   deleteHrFile,
   getSyncedEmployees,
+  queryEmployeeRecords,
   getEnterpriseAnalytics,
   getCachedEnterpriseAnalytics,
   getCachedSyncedEmployees,
@@ -85,6 +86,8 @@ router.get('/hr/files/:filename/download', downloadRawFile);
 router.delete('/hr/files/:id', deleteHrFile);
 router.get('/hr/analysis', getLatestHrAnalysis);
 router.post('/hr/analyze', runCustomAiAnalysis);
+router.get('/hr/employees/query', queryEmployeeRecords);
+router.post('/hr/employees/query', queryEmployeeRecords);
 router.get('/hr/employees', getSyncedEmployees);
 router.get('/analytics/enterprise', getEnterpriseAnalytics);
 
@@ -209,27 +212,82 @@ router.get('/finance', async (req, res) => {
     analytics = getCachedEnterpriseAnalytics();
   }
 
-  const f = analytics?.finance || {
-    grossRevenue: 0,
-    totalMonthlyPayroll: 0,
-    formattedPayroll: '₹0.00L',
-    payrollRatio: '0.0%',
-    targetPayrollRatio: '12.0%',
-    runwayMonths: 18,
-    grossMargin: '68%'
-  };
+  const f = analytics?.finance;
+  const grossRev = f?.grossRevenue || 0;
+  const payrollExp = f?.totalMonthlyPayroll || 0;
+  const hasFinanceData = grossRev > 0 || payrollExp > 0;
+
+  // Pure dynamic metrics without hardcoded static fallbacks
+  const calculatedRunway = payrollExp > 0
+    ? (grossRev > 0 ? (grossRev / payrollExp).toFixed(1) + ' mos' : 'N/A')
+    : 'N/A';
+  const calculatedGrossMargin = grossRev > 0 && payrollExp > 0
+    ? Math.max(0, Math.min(100, Math.round(((grossRev - payrollExp) / grossRev) * 100))) + '%'
+    : 'N/A';
 
   res.json({
     module: 'Finance Intelligence',
+    status: hasFinanceData ? 'active' : 'awaiting_data',
+    data: {
+      totalMonthlyRevenue: grossRev,
+      payrollExpenditure: payrollExp,
+      formattedPayroll: f?.formattedPayroll || '₹0.00L',
+      payrollRatio: f?.payrollRatio || (hasFinanceData ? '0.0%' : 'N/A'),
+      targetRatio: f?.targetPayrollRatio || '12.0%',
+      runwayMonths: calculatedRunway,
+      grossMargin: calculatedGrossMargin
+    }
+  });
+});
+
+router.get('/operations', async (req, res) => {
+  let analytics = getCachedEnterpriseAnalytics();
+  let employees = getCachedSyncedEmployees();
+  const uploadedFiles = getUploadedFilesStore();
+
+  if (!analytics || employees.length === 0) {
+    await recomputeAnalytics();
+    analytics = getCachedEnterpriseAnalytics();
+    employees = getCachedSyncedEmployees();
+  }
+
+  // Calculate schedule compliance dynamically from ingested attendance telemetry
+  let complianceStr = 'N/A';
+  const attFile = uploadedFiles?.find((f) =>
+    f.holds?.includes('Attendance') ||
+    f.name.toLowerCase().includes('attend') ||
+    f.name.toLowerCase().includes('muster') ||
+    f.name.toLowerCase().includes('roster')
+  );
+
+  if (attFile && attFile.parsedRows && attFile.parsedRows.length > 0) {
+    const rows = attFile.parsedRows;
+    let scheduledTotal = 0;
+    let productiveTotal = 0;
+    rows.forEach((r) => {
+      const sched = parseFloat(String(r.scheduled_hours || r.scheduledhours || 8).replace(/[^0-9.-]/g, '')) || 0;
+      const prod = parseFloat(String(r.productive_hours || r.productivehours || r.hours_worked || 0).replace(/[^0-9.-]/g, '')) || 0;
+      if (sched > 0) {
+        scheduledTotal += sched;
+        productiveTotal += Math.min(sched, prod);
+      }
+    });
+    if (scheduledTotal > 0) {
+      complianceStr = Math.min(100, Math.round((productiveTotal / scheduledTotal) * 100)) + '%';
+    } else {
+      complianceStr = '100%';
+    }
+  }
+
+  res.json({
+    module: 'Operations Intelligence',
     status: 'active',
     data: {
-      totalMonthlyRevenue: f.grossRevenue || 0,
-      payrollExpenditure: f.totalMonthlyPayroll || 0,
-      formattedPayroll: f.formattedPayroll || '₹0.00L',
-      payrollRatio: f.payrollRatio || '0.0%',
-      targetRatio: f.targetPayrollRatio || '12.0%',
-      runwayMonths: f.runwayMonths || 18,
-      grossMargin: f.grossMargin || '68%'
+      activeWorkforce: employees.length || 0,
+      overtimeHoursTotal: analytics?.operations?.totalOvertimeHours || '0.0',
+      scheduleCompliance: complianceStr,
+      openDiscrepancies: analytics?.operations?.openAuditDiscrepancies || 0,
+      inProgressTasks: analytics?.operations?.inProgressTasks || 0
     }
   });
 });
@@ -293,18 +351,68 @@ router.get('/business-health', async (req, res) => {
   }
 
   const latestAnalysis = getCachedLatestAnalysis();
-  const score = parseInt(latestAnalysis?.healthScore) || 85;
+  const hrScoreNum = parseInt(latestAnalysis?.healthScore) || (employees.length > 0 ? 80 : 0);
+
+  // Dynamic Sales Score based on quota attainment across branches
+  const branches = latestAnalysis?.storesSummary?.branches || [];
+  let salesScore = 0;
+  if (branches.length > 0) {
+    const totalAttainment = branches.reduce((sum, b) => {
+      const target = b.monthlyTarget || 0;
+      const sales = b.netSales || 0;
+      return sum + (target > 0 ? Math.min(100, (sales / target) * 100) : 75);
+    }, 0);
+    salesScore = Math.round(totalAttainment / branches.length);
+  } else if (analytics?.sales?.totalRevenue > 0) {
+    salesScore = 80;
+  }
+
+  // Dynamic Finance Score based on payroll-to-revenue ratio vs target
+  let financeScore = 0;
+  const payrollRatioNum = parseFloat(analytics?.finance?.payrollRatio || '0');
+  const targetRatioNum = parseFloat(analytics?.finance?.targetRatio || '12.0');
+  if (payrollRatioNum > 0) {
+    const gap = Math.abs(payrollRatioNum - targetRatioNum);
+    financeScore = Math.max(40, Math.min(100, Math.round(100 - gap * 4)));
+  } else if (analytics?.finance?.grossRevenue > 0) {
+    financeScore = 75;
+  }
+
+  // Dynamic Operations Score based on audit discrepancies & overtime concentration
+  let opsScore = 0;
+  const discrepancies = analytics?.operations?.openAuditDiscrepancies || 0;
+  const otHours = parseFloat(analytics?.operations?.totalOvertimeHours || '0');
+  if (employees.length > 0 || branches.length > 0) {
+    opsScore = Math.max(50, Math.min(100, Math.round(100 - (discrepancies * 2) - (otHours > 50 ? 10 : 0))));
+  }
+
+  // Composite overall score from active engines
+  const activeScores = [hrScoreNum, salesScore, financeScore, opsScore].filter((s) => s > 0);
+  const compositeScore = activeScores.length > 0
+    ? Math.round(activeScores.reduce((a, b) => a + b, 0) / activeScores.length)
+    : 0;
+
+  // Real strategic priorities synthesized directly from detected attention items
+  const strategicPriorities = (latestAnalysis?.attentionItems || []).slice(0, 3).map((item, idx) => ({
+    title: item.title,
+    desc: item.description || item.whatsHappening || 'Action required based on telemetry.',
+    bg: idx === 0 ? '#eff6ff' : (idx === 1 ? '#f0fdf4' : '#fffbeb'),
+    border: idx === 0 ? '#bfdbfe' : (idx === 1 ? '#bbf7d0' : '#fde68a'),
+    color: idx === 0 ? '#1e40af' : (idx === 1 ? '#166534' : '#b45309')
+  }));
+
   res.json({
     module: 'Business Health',
     status: 'active',
     data: {
-      overallScore: score,
-      status: latestAnalysis?.healthStatus || 'Optimal (Synchronized)',
+      overallScore: compositeScore > 0 ? compositeScore : null,
+      status: compositeScore >= 80 ? 'Optimal (Synchronized)' : (compositeScore >= 65 ? 'Needs Attention' : (compositeScore > 0 ? 'Critical' : 'Awaiting Telemetry')),
+      strategicPriorities,
       engineBreakdown: [
-        { id: 'hr', name: 'HR Intelligence', score: score, status: 'Active', detail: `${employees.length} employees synced` },
-        { id: 'sales', name: 'Sales Intelligence', score: 88, status: 'Active', detail: `${analytics?.sales?.formattedRevenue || '₹0.00L'} Revenue` },
-        { id: 'finance', name: 'Finance Intelligence', score: 84, status: 'Active', detail: `${analytics?.finance?.payrollRatio || '0.0%'} Payroll Ratio` },
-        { id: 'operations', name: 'Operations Intelligence', score: 86, status: 'Active', detail: `${analytics?.operations?.openAuditDiscrepancies || 0} Audit Discrepancies Monitored` }
+        { id: 'hr', name: 'HR Intelligence', score: hrScoreNum, status: hrScoreNum > 0 ? 'Active' : 'Awaiting Data', detail: `${employees.length} employees synced` },
+        { id: 'sales', name: 'Sales Intelligence', score: salesScore, status: salesScore > 0 ? 'Active' : 'Awaiting Data', detail: `${analytics?.sales?.formattedRevenue || '₹0.00L'} Revenue` },
+        { id: 'finance', name: 'Finance Intelligence', score: financeScore, status: financeScore > 0 ? 'Active' : 'Awaiting Data', detail: `${analytics?.finance?.payrollRatio || 'N/A'} Payroll Ratio` },
+        { id: 'operations', name: 'Operations Intelligence', score: opsScore, status: opsScore > 0 ? 'Active' : 'Awaiting Data', detail: `${discrepancies} Audit Discrepancies Monitored` }
       ]
     }
   });

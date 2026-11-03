@@ -1,4 +1,12 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
+
+// Fix for Windows / ISP DNS resolvers failing SRV lookups (querySrv ECONNREFUSED)
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (err) {
+  // Fallback if environment restricts custom DNS servers
+}
 
 export const connectDB = async () => {
   try {

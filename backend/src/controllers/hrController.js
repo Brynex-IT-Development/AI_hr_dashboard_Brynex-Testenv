@@ -1,3 +1,4 @@
+import { queryEmployeeData } from '../services/employeeDataQueryService.js';
 import path from 'path';
 import fs from 'fs';
 import { parseUploadedFile } from '../services/fileParserService.js';
@@ -686,3 +687,37 @@ export const getCachedLatestAnalysis = () => latestAnalysis;
 export const getUploadedFilesStore = () => uploadedFilesStore;
 export const getActiveAdminPrompt = () => activeAdminPrompt;
 export const getActiveCustomRules = () => activeCustomRules;
+
+/**
+ * Deterministic Employee Query Endpoint
+ * Supports filtering by empId, status, employmentStatus, confirmation dates, store, chronology, and PII masking
+ */
+export const queryEmployeeRecords = (req, res) => {
+  try {
+    const params = { ...req.query, ...req.body };
+    const { fileId, ...filters } = params;
+
+    let targetRows = [];
+    let selectedFile = null;
+
+    if (fileId) {
+      selectedFile = uploadedFilesStore.find((f) => f.id === fileId || f.savedFilename === fileId || f.name === fileId);
+      if (selectedFile) {
+        targetRows = selectedFile.parsedRows || [];
+      }
+    } else if (uploadedFilesStore.length > 0) {
+      selectedFile = uploadedFilesStore.find((f) => f.holds?.includes('Employee') || f.name.toLowerCase().includes('employee') || f.name.toLowerCase().includes('export')) || uploadedFilesStore[0];
+      targetRows = selectedFile.parsedRows || [];
+    }
+
+    const result = queryEmployeeData(targetRows, {
+      fileId: selectedFile?.id || 'unassigned',
+      fileName: selectedFile?.name || 'Dataset',
+      ...filters
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};

@@ -8,6 +8,7 @@
 
 import { extractStoreMonthlyTarget, extractStoreNetSales, extractStoreFootfallAndWalkins } from './hrIntelligenceAggregator.js';
 import { parsePromptIntent, matchesBranch, recordMatchesPrompt, itemMatchesPrompt } from './promptMatcherService.js';
+import { parseFlexibleDate, formatDateIso, maskPii } from './employeeDataQueryService.js';
 
 // Helper to extract a statistical profile and representative rows from tabular data
 export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
@@ -35,15 +36,30 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
     const columns = Object.keys(rows[0] || {});
     const numericStats = {};
     const categoricalCounts = {};
+    const dateStats = {};
 
-    // Analyze first 200 rows for fast statistical distribution
+    // Analyze first 250 rows for fast statistical distribution
     const sampleLimit = Math.min(rows.length, 250);
     for (let i = 0; i < sampleLimit; i++) {
       const row = rows[i];
       for (const col of columns) {
         const val = row[col];
-        const num = parseFloat(val);
-        if (!isNaN(num) && typeof val !== 'boolean') {
+        if (val === undefined || val === null || String(val).trim() === '') continue;
+
+        const valStr = String(val).trim();
+        const parsedDate = parseFlexibleDate(valStr);
+        const isPureNumber = /^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(valStr);
+
+        // If it's a date or column has date/doj/dob/birthday semantics, treat as date, NOT numeric!
+        if (parsedDate && (!isPureNumber || col.toLowerCase().includes('date') || col.toLowerCase().includes('doj') || col.toLowerCase().includes('dob') || col.toLowerCase().includes('birthday'))) {
+          if (!dateStats[col]) {
+            dateStats[col] = { count: 0, earliest: parsedDate, latest: parsedDate };
+          }
+          dateStats[col].count += 1;
+          if (parsedDate < dateStats[col].earliest) dateStats[col].earliest = parsedDate;
+          if (parsedDate > dateStats[col].latest) dateStats[col].latest = parsedDate;
+        } else if (isPureNumber) {
+          const num = parseFloat(valStr);
           if (!numericStats[col]) {
             numericStats[col] = { count: 0, sum: 0, min: num, max: num };
           }
@@ -51,9 +67,9 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
           numericStats[col].sum += num;
           if (num < numericStats[col].min) numericStats[col].min = num;
           if (num > numericStats[col].max) numericStats[col].max = num;
-        } else if (val && typeof val === 'string' && val.length < 35) {
+        } else if (valStr.length < 35) {
           if (!categoricalCounts[col]) categoricalCounts[col] = {};
-          categoricalCounts[col][val] = (categoricalCounts[col][val] || 0) + 1;
+          categoricalCounts[col][valStr] = (categoricalCounts[col][valStr] || 0) + 1;
         }
       }
     }
@@ -71,6 +87,18 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
       }
     }
 
+    // Date summaries preserving calendar semantics
+    const dateSummary = {};
+    for (const [col, stat] of Object.entries(dateStats)) {
+      if (stat.count > 0) {
+        dateSummary[col] = {
+          count: stat.count,
+          earliest: formatDateIso(stat.earliest),
+          latest: formatDateIso(stat.latest)
+        };
+      }
+    }
+
     // Top categorical values
     const categoricalSummary = {};
     for (const [col, counts] of Object.entries(categoricalCounts)) {
@@ -80,10 +108,10 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
       }
     }
 
-    // Select representative rows: first 5 rows + outlier rows
-    const sampleRows = rows.slice(0, 6);
+    // Select representative rows: first 5 rows + outlier rows (Masked for PII protection: PAN, UAN, Phone, Bank A/c redacted)
+    const sampleRows = rows.slice(0, 6).map((r) => maskPii(r, false));
     
-    // Look for potential outliers (e.g. exit notices, overtime, low rest, high spend, zero revenue, zero footfall)
+    // Look for potential outliers (Masked for PII protection)
     const anomalyRows = [];
     rows.forEach((r) => {
       const str = JSON.stringify(r).toLowerCase();
@@ -100,7 +128,7 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
         footfall === 0
       ) {
         if (anomalyRows.length < 8 && !sampleRows.includes(r)) {
-          anomalyRows.push(r);
+          anomalyRows.push(maskPii(r, false));
         }
       }
     });
@@ -111,6 +139,7 @@ export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
       totalRows,
       columns,
       numericSummary,
+      dateSummary,
       categoricalSummary,
       sampleRows,
       anomalyRows
@@ -139,7 +168,7 @@ export const runClaudeDocumentAnalysis = async ({ files, adminPrompt = '', custo
     files.forEach((f) => {
       (f.parsedRows || []).forEach((r) => {
         if (recordMatchesPrompt(r, intent) && matchingRecordsSample.length < 35) {
-          matchingRecordsSample.push(r);
+          matchingRecordsSample.push(maskPii(r, false));
         }
       });
     });
@@ -241,66 +270,55 @@ ${coverageDirective}
 4. Compute an overall composite HR Health Score (0 to 100) based strictly on the findings in the data.
 
 OUTPUT REQUIREMENT:
-Respond ONLY with a single valid, parseable JSON object matching this exact schema (no markdown formatting, no commentary before or after the JSON):
+Respond ONLY with a single valid, parseable JSON object matching this exact schema specification (no markdown formatting, no commentary before or after the JSON):
 {
-  "healthScore": 82,
-  "healthStatus": "Healthy",
-  "reportingPeriod": "Date range detected from data (e.g. 01-30 Sep 2026)",
-  "attentionSummary": "1-2 sentence high-level executive summary of key management signals found across ALL connected files",
+  "healthScore": 0, // integer 0 to 100 calculated strictly from data findings (0=critical distress, 100=optimal)
+  "healthStatus": "<'Healthy' | 'Needs Attention' | 'Critical'>",
+  "reportingPeriod": "<string: date range detected from data, or N/A>",
+  "attentionSummary": "<string: 1-2 sentence executive summary of key management signals found across ALL connected files>",
   "kpiMetrics": [
     { "id": "issues", "title": "Issues Detected", "value": "${expectedTotalIssues}", "trend": "Active risks detected", "trendPositive": false, "colorClass": "hr-kpi-icon-purple" },
     { "id": "decisions", "title": "Awaited Decisions", "value": "${expectedTotalIssues}", "trend": "Requires executive review", "trendPositive": true, "colorClass": "hr-kpi-icon-red" },
     { "id": "monitored", "title": "Records Monitored", "value": "${totalHeadcountOrRows}", "trend": "Live telemetry parsed across ${files.length} datasets", "trendPositive": true, "colorClass": "hr-kpi-icon-green" },
-    { "id": "opportunities", "title": "Opportunities", "value": "2", "trend": "Optimization levers", "trendPositive": true, "colorClass": "hr-kpi-icon-orange" },
-    { "id": "productivity", "title": "Avg. Productivity", "value": "88%", "trend": "+2% vs target", "trendPositive": true, "colorClass": "hr-kpi-icon-blue" }
+    { "id": "opportunities", "title": "Opportunities", "value": "0", "trend": "Optimization levers", "trendPositive": true, "colorClass": "hr-kpi-icon-orange" },
+    { "id": "productivity", "title": "Avg. Productivity", "value": "N/A", "trend": "Attendance rate", "trendPositive": true, "colorClass": "hr-kpi-icon-blue" }
   ],
   "attentionItems": [
     {
-      "id": "issue-1",
-      "category": "Critical",
-      "priority": "High Priority",
-      "status": "Needs investigation",
-      "title": "Concise issue headline from data",
-      "sourceFile": "${files[0].name}",
-      "description": "Executive description referencing actual numbers and the specific file name",
-      "branch": "Branch from file or All Branches",
-      "department": "Department affected or Operations",
-      "topic": "Domain topic (e.g. Store Revenue & Sales, Shift Scheduling, Employee Retention)",
-      "dateRange": "Period from data",
-      "confidence": "91%",
-      "whatsHappening": "Detailed explanation of what the telemetry in this file reveals",
+      "id": "<string: e.g. issue-1>",
+      "category": "<'Critical' | 'Warning' | 'Advisory'>",
+      "priority": "<'High Priority' | 'Medium Priority' | 'Low Priority'>",
+      "status": "<'Needs immediate action' | 'Action Required' | 'Monitoring'>",
+      "title": "<string: concise issue headline derived strictly from data>",
+      "sourceFile": "<string: name of dataset file where issue originated>",
+      "description": "<string: executive description referencing actual numbers and file name>",
+      "branch": "<string: branch from file or 'Store Network'>",
+      "department": "<string: department affected or 'Operations'>",
+      "topic": "<string: domain topic e.g. Store Revenue & Sales, Shift Scheduling, Employee Retention>",
+      "dateRange": "<string: period detected from data>",
+      "confidence": "<string: calculated confidence percentage e.g. '88%'>",
+      "whatsHappening": "<string: detailed explanation of what telemetry reveals>",
       "metrics": [
-        { "label": "Metric 1", "val": "Value 1", "note": "Note 1", "hasDownArrow": false },
-        { "label": "Metric 2", "val": "Value 2", "note": "Note 2", "hasDownArrow": true },
-        { "label": "Metric 3", "val": "Value 3", "note": "Note 3", "hasDownArrow": false },
-        { "label": "Metric 4", "val": "Value 4", "note": "Note 4", "hasDownArrow": false }
+        { "label": "<string: metric name>", "val": "<string: metric value from data>", "note": "<string: context note>", "hasDownArrow": false }
       ],
       "evidence": [
-        { "title": "Evidence Title", "desc": "Specific data record or pattern found", "record": "Record pill" },
-        { "title": "Evidence Title 2", "desc": "Specific data record or pattern found", "record": "Record pill" }
+        { "title": "<string: evidence title>", "desc": "<string: specific verified data record or pattern>", "record": "<string: record identifier or tag>" }
       ],
       "possibleCauses": [
         {
-          "title": "Cause Headline",
-          "description": "Left-brain explanation of why this occurred based on data correlation",
-          "confidence": "High Confidence (88%)",
-          "evidence": "Concrete evidence string"
+          "title": "<string: root cause headline>",
+          "description": "<string: left-brain explanation of why this occurred based on data>",
+          "confidence": "<string: confidence level e.g. 'High Confidence (90%)'>",
+          "evidence": "<string: concrete data evidence cited>"
         }
       ],
       "decisionOptions": [
         {
-          "id": "opt-1-1",
-          "badge": "Option A (Recommended)",
-          "title": "Remedy title",
-          "description": "Actionable countermeasure description",
-          "impact": "Quantifiable expected outcome"
-        },
-        {
-          "id": "opt-1-2",
-          "badge": "Option B",
-          "title": "Alternative remedy title",
-          "description": "Actionable countermeasure description",
-          "impact": "Quantifiable expected outcome"
+          "id": "<string: e.g. opt-1-1>",
+          "badge": "<string: e.g. 'Option A (Recommended)' | 'Option B'>",
+          "title": "<string: actionable remedy title>",
+          "description": "<string: actionable countermeasure description>",
+          "impact": "<string: quantifiable expected outcome>"
         }
       ]
     }
@@ -487,7 +505,7 @@ TASK & DIRECTIVES:
    ${intent.brand === 'G' ? '- The user asked for Brand G (Suitor Guy Edappally / G-Edappally). You MUST NEVER include, cite, or mention Z-Edappally, Zorucci, Zeness, Zubar, or any Z format stores or staff.' : ''}
    ${intent.brand === 'Z' ? '- The user asked for Brand Z (Zorucci Edappally / Z-Edappally). You MUST NEVER include, cite, or mention G-Edappally, Suitor Guy, SG, or any G format stores or staff.' : ''}
    - Evaluate the exact targets, net sales, footfall, and conversion for this target group.
-   - If the user specifies a particular store (e.g. Edappally, Kollam, Trivandrum, Perinthalmanna, Kottayam), evaluate that branch's exact targets, net sales, footfall, and conversion in depth.
+   - If the user specifies a particular store or branch, evaluate that branch's exact targets, net sales, footfall, and conversion in depth.
    - If the user asks for "lagging stores", evaluate the lowest quota attainment stores.
    - If the user asks about "consultants" or "skills" or "accessories", evaluate the assessment pass rates vs sales conversion.
    - If the user asks about "camera" or "audit" or "discrepancies", evaluate branch camera audits vs register logs.
@@ -507,65 +525,55 @@ TASK & DIRECTIVES:
 3. Keep all text concise, executive, and punchy. No essays.
 
 OUTPUT REQUIREMENT:
-Respond ONLY with a single valid, parseable JSON object matching this exact schema (no markdown formatting, no commentary before or after):
+Respond ONLY with a single valid, parseable JSON object matching this exact schema specification (no markdown formatting, no commentary before or after):
 {
-  "healthScore": 79,
-  "healthStatus": "Needs Attention",
-  "reportingPeriod": "01-30 Sep 2026",
-  "attentionSummary": "Executive summary of live retail findings matching the prompt focus",
+  "healthScore": 0, // integer 0-100 calculated dynamically from store quota attainment and operational health
+  "healthStatus": "<'Healthy' | 'Needs Attention' | 'Critical'>",
+  "reportingPeriod": "<string: reporting period detected from telemetry>",
+  "attentionSummary": "<string: executive summary of live retail findings matching prompt focus>",
   "kpiMetrics": [
-    { "id": "issues", "title": "Issues Detected", "value": "3", "trend": "Active risks across datasets", "trendPositive": false, "colorClass": "hr-kpi-icon-purple" },
-    { "id": "decisions", "title": "Awaited Decisions", "value": "3", "trend": "3 management options ready for approval", "trendPositive": true, "colorClass": "hr-kpi-icon-red" },
-    { "id": "monitored", "title": "Being Monitored", "value": "25 Stores", "trend": "554 retail staff across network", "trendPositive": true, "colorClass": "hr-kpi-icon-green" },
-    { "id": "opportunities", "title": "Opportunities", "value": "2", "trend": "Upsell & footfall levers", "trendPositive": true, "colorClass": "hr-kpi-icon-orange" },
-    { "id": "productivity", "title": "Avg. Productivity", "value": "84%", "trend": "+2.4% retail quota benchmark", "trendPositive": true, "colorClass": "hr-kpi-icon-blue" }
+    { "id": "issues", "title": "Issues Detected", "value": "0", "trend": "Active risks across telemetry", "trendPositive": false, "colorClass": "hr-kpi-icon-purple" },
+    { "id": "decisions", "title": "Awaited Decisions", "value": "0", "trend": "Management options ready for review", "trendPositive": true, "colorClass": "hr-kpi-icon-red" },
+    { "id": "monitored", "title": "Being Monitored", "value": "${compactStores.length} Stores", "trend": "${staffSample.length} retail staff across network", "trendPositive": true, "colorClass": "hr-kpi-icon-green" },
+    { "id": "opportunities", "title": "Opportunities", "value": "0", "trend": "Upsell & footfall levers", "trendPositive": true, "colorClass": "hr-kpi-icon-orange" },
+    { "id": "productivity", "title": "Avg. Productivity", "value": "N/A", "trend": "Calculated quota benchmark", "trendPositive": true, "colorClass": "hr-kpi-icon-blue" }
   ],
   "attentionItems": [
     {
-      "id": "item-1",
-      "category": "Critical",
-      "priority": "High Priority",
-      "status": "Needs immediate action",
-      "title": "Title with real store and attainment %",
-      "sourceFile": "Store 360 API (Branch Name)",
-      "description": "Executive description with numbers",
-      "branch": "Branch Name",
-      "topic": "Domain Topic",
-      "dateRange": "01-30 Sep 2026",
-      "confidence": "93%",
-      "department": "Retail Operations",
-      "whatsHappening": "Root explanation of telemetry",
+      "id": "<string: e.g. item-1>",
+      "category": "<'Critical' | 'Warning' | 'Advisory'>",
+      "priority": "<'High Priority' | 'Medium Priority' | 'Low Priority'>",
+      "status": "<'Needs immediate action' | 'Action Required' | 'Monitoring'>",
+      "title": "<string: concise headline citing exact store and attainment % from telemetry>",
+      "sourceFile": "<string: 'Store 360 API (' + branch name + ')' or connected dataset name>",
+      "description": "<string: executive description referencing actual numbers from telemetry>",
+      "branch": "<string: specific branch name or 'Store Network'>",
+      "topic": "<string: domain topic e.g. Target Variance, Rest Turnaround, Retention>",
+      "dateRange": "<string: reporting period detected from telemetry>",
+      "confidence": "<string: calculated confidence percentage e.g. '90%'>",
+      "department": "<string: department affected or 'Retail Operations'>",
+      "whatsHappening": "<string: root explanation of telemetry correlation>",
       "metrics": [
-        { "label": "Target Attainment", "val": "76.5%", "note": "Target Note", "hasDownArrow": true },
-        { "label": "Verified Footfall", "val": "820 Visits", "note": "Footfall note" },
-        { "label": "Walk-in Conversion", "val": "26.2%", "note": "Conversion note" },
-        { "label": "Discrepancies", "val": "16 Items", "note": "Audit note" }
+        { "label": "<string: metric name>", "val": "<string: metric value from data>", "note": "<string: context note>", "hasDownArrow": false }
       ],
       "evidence": [
-        { "title": "Evidence Title", "desc": "Evidence description", "record": "Pill text" }
+        { "title": "<string: evidence title>", "desc": "<string: verified fact from telemetry>", "record": "<string: specific record pill label>" }
       ],
       "possibleCauses": [
         {
-          "title": "Root cause title",
-          "confidence": "High Confidence (91%)",
-          "description": "Why this happened",
-          "evidence": "Data evidence"
+          "title": "<string: root cause headline>",
+          "confidence": "<string: confidence level e.g. 'High Confidence (90%)'>",
+          "description": "<string: why this happened based strictly on telemetry>",
+          "evidence": "<string: concrete data evidence cited>"
         }
       ],
       "decisionOptions": [
         {
-          "id": "opt-1",
-          "badge": "Option A (Recommended)",
-          "title": "Action title",
-          "description": "Action description",
-          "impact": "Quantifiable impact"
-        },
-        {
-          "id": "opt-2",
-          "badge": "Option B",
-          "title": "Alternative action title",
-          "description": "Alternative description",
-          "impact": "Alternative impact"
+          "id": "<string: e.g. opt-1>",
+          "badge": "<string: e.g. 'Option A (Recommended)' | 'Option B'>",
+          "title": "<string: remedy action title>",
+          "description": "<string: actionable countermeasure description>",
+          "impact": "<string: quantifiable expected outcome>"
         }
       ]
     }

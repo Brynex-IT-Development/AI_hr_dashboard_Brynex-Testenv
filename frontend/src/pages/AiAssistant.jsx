@@ -412,62 +412,69 @@ export default function AiAssistant() {
     }
   };
 
-  // 4 Strategic Advisory Cards generated dynamically based on connected workforce data
   // 4 Strategic Advisory Cards generated dynamically based on connected workforce data & live retail telemetry
   const promptCards = useMemo(() => {
     const cards = [];
     const attentionItems = latestAnalysis?.attentionItems || [];
 
-    // Card 1: Retail Lag & Performance variance (G.Perinthalmanna)
+    // Dynamically populate from real attention items
     if (attentionItems.length > 0) {
-      const item1 = attentionItems[0];
-      const titleStr = item1.title || item1.flagType || 'workforce telemetry pattern';
-      cards.push({
-        id: 'issue-1',
-        category: 'RETAIL TELEMETRY',
-        icon: <TriangleAlert size={16} />,
-        text: `Why did ${titleStr.slice(0, 52)}... occur and what is the strategic remedy?`
-      });
-    } else {
-      cards.push({
-        id: 'perinthalmanna-lag',
-        category: 'RETAIL TELEMETRY',
-        icon: <TriangleAlert size={16} />,
-        text: 'Why is Store Perinthalmanna lagging at 76.5% quota attainment against its ₹32.0L target?'
+      attentionItems.slice(0, 4).forEach((item, idx) => {
+        const titleStr = item.title || item.flagType || 'workforce telemetry pattern';
+        cards.push({
+          id: item.id || `issue-${idx + 1}`,
+          category: (item.category || 'RETAIL TELEMETRY').toUpperCase(),
+          icon: <TriangleAlert size={16} />,
+          text: `Why did "${titleStr.slice(0, 52)}" occur and what is the strategic remedy?`
+        });
       });
     }
 
-    // Card 2: Footfall contraction vs Consultant conversion rate
-    cards.push({
-      id: 'footfall-conversion',
-      category: 'TRAFFIC AUDIT',
-      icon: <Clock size={16} />,
-      text: 'Analyze Store Perinthalmanna 24% footfall contraction vs steady 26.2% conversion rate'
-    });
-
-    // Card 3: Employee 360 - Niyas (EMP93)
-    cards.push({
-      id: 'staff-performance',
-      category: 'TALENT ASSESSMENT',
-      icon: <UserCheck size={16} />,
-      text: 'Review EMP93 (Niyas Binu Nasar K) 85% target attainment and Luxury Fabric Certification'
-    });
-
-    // Card 4: Operational Discrepancies or Connected Dataset
-    if (uploadedFiles && uploadedFiles.length > 0) {
-      cards.push({
-        id: 'uploaded-data',
-        category: 'DATASET INSIGHT',
-        icon: <FileSpreadsheet size={16} />,
-        text: `Evaluate workforce trends from "${uploadedFiles[0].name}" across our store network`
+    // Add cards from real connected datasets if space remains
+    if (cards.length < 4 && uploadedFiles && uploadedFiles.length > 0) {
+      uploadedFiles.slice(0, 2).forEach((f, idx) => {
+        if (cards.length < 4) {
+          cards.push({
+            id: `dataset-${idx}`,
+            category: 'DATASET INSIGHT',
+            icon: <FileSpreadsheet size={16} />,
+            text: `Evaluate workforce trends and headcount signals from "${f.name}"`
+          });
+        }
       });
-    } else {
-      cards.push({
+    }
+
+    // Fill remaining slots with clean, non-mock operational inquiries
+    const defaultInquiries = [
+      {
+        id: 'quota-variance',
+        category: 'SALES & QUOTA',
+        icon: <TriangleAlert size={16} />,
+        text: 'Which retail branches have the highest target vs actual net sales variances?'
+      },
+      {
+        id: 'workforce-roster',
+        category: 'ROSTER & SHIFTS',
+        icon: <Clock size={16} />,
+        text: 'Evaluate workforce attendance rosters, rest turnaround intervals, and overtime'
+      },
+      {
+        id: 'talent-retention',
+        category: 'TALENT RETENTION',
+        icon: <UserCheck size={16} />,
+        text: 'List employees currently in notice period, probation, or approaching confirmation'
+      },
+      {
         id: 'audit-discrepancies',
         category: 'COMPLIANCE & AUDIT',
         icon: <GitBranch size={16} />,
-        text: 'Review the 28 open operational walk-in discrepancies between camera and POS registers'
-      });
+        text: 'Review operational audit scores and register discrepancies across store locations'
+      }
+    ];
+
+    for (const item of defaultInquiries) {
+      if (cards.length >= 4) break;
+      cards.push(item);
     }
 
     return cards.slice(0, 4);
@@ -475,19 +482,13 @@ export default function AiAssistant() {
 
   // Suggested Follow-ups derived dynamically from connected datasets & live telemetry
   const suggestedFollowUps = useMemo(() => {
-    const list = [
-      'Why is Store Perinthalmanna lagging at 76.5% quota attainment?',
-      'Analyze footfall contraction (-24%) vs consultant conversion (26.2%)',
-      'Review consultant Niyas Binu Nasar K (EMP93) sales attainment',
-      'Audit 28 operational walk-in discrepancies between cameras and POS',
-      'Compare Store Edappally (92.8% attainment) vs Perinthalmanna'
-    ];
+    const list = [];
 
     if (latestAnalysis?.attentionItems?.length > 0) {
       latestAnalysis.attentionItems.forEach((item) => {
         const itemTitle = item.title || item.flagType || null;
         if (itemTitle) {
-          list.unshift(`What is the recommended remedy for "${itemTitle.slice(0, 36)}..."?`);
+          list.push(`What is the recommended remedy for "${itemTitle.slice(0, 42)}..."?`);
         }
       });
     }
@@ -496,17 +497,32 @@ export default function AiAssistant() {
       uploadedFiles.forEach((f) => {
         const lower = f.name.toLowerCase();
         if (lower.includes('attend') || f.holds?.includes('Attendance')) {
-          list.push('Which employees recorded rest intervals under 10 hours?');
-          list.push('Analyze closing shift productivity (82%) vs daytime rosters');
+          list.push(`Which employees recorded rest intervals under 10 hours in ${f.name}?`);
+          list.push(`Analyze shift turnaround compliance and overtime patterns from ${f.name}`);
         }
         if (lower.includes('employee') || f.holds?.includes('Payroll') || f.holds?.includes('People')) {
-          list.push('List employees currently in notice period or probation');
-          list.push('What is our monthly payroll cost breakdown by role?');
+          list.push(`List employees currently on probation or notice period in ${f.name}`);
+          list.push(`What is our monthly payroll cost breakdown by role from ${f.name}?`);
         }
         if (lower.includes('sale') || f.holds?.includes('Revenue')) {
-          list.push('Which branch generated the highest daily sales revenue?');
+          list.push(`Which branch achieved the highest quota attainment in ${f.name}?`);
         }
       });
+    }
+
+    // Default dynamic inquiry inquiries when telemetry is pending
+    if (list.length < 5) {
+      const generalQueries = [
+        'Which retail branches have the lowest quota attainment?',
+        'Analyze attendance roster compliance and shift rest turnaround intervals',
+        'List active employees with upcoming confirmation dates',
+        'Review store audit scores and operational discrepancy logs',
+        'Compare sales performance across connected store locations'
+      ];
+      for (const gq of generalQueries) {
+        if (list.length >= 5) break;
+        if (!list.includes(gq)) list.push(gq);
+      }
     }
 
     return Array.from(new Set(list)).slice(0, 5);

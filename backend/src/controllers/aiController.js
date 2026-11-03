@@ -5,6 +5,7 @@ import {
   getCachedEnterpriseAnalytics
 } from './hrController.js';
 import { extractDatasetTelemetry } from '../services/aiDocumentAnalyzerService.js';
+import { queryEmployeeData, formatQueryResultForAi } from '../services/employeeDataQueryService.js';
 import { fetchEmployeeOverview, fetchStoreOverview } from '../services/externalIntegrationService.js';
 
 // AI Controller - Human Executive Workforce & HR Advisory Partner Persona
@@ -190,7 +191,61 @@ ${(p.anomalyRows || []).slice(0, 6).map((r) => `    * ${JSON.stringify(r)}`).joi
         }
       }
 
-      // 2. Query Entity Matcher (Deep lookups for any mentioned employee or store)
+      // 2. Deterministic Row-Level Employee Dataset Query Layer
+      let verifiedDatasetQueryContext = '';
+      const empIdMatches = userText.match(/\b(emp[-_]?\d+|mgr[-_]?\d+)\b/gi);
+
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        // A. Specific Employee ID lookups
+        if (empIdMatches && empIdMatches.length > 0) {
+          for (const rawId of empIdMatches) {
+            for (const file of uploadedFiles) {
+              const qRes = queryEmployeeData(file.parsedRows || [], {
+                fileId: file.id,
+                fileName: file.name,
+                empId: rawId,
+                includePii: false
+              });
+              if (qRes.matchedCount > 0) {
+                verifiedDatasetQueryContext += formatQueryResultForAi(qRes) + '\n';
+              }
+            }
+          }
+        }
+
+        // B. Probation / Confirmation Date / LWD / Resignation Queries
+        const isProbationQuery = userText.includes('probation') || userText.includes('confirmation date') || userText.includes('confirmation') || userText.includes('confirm');
+        const isLwdQuery = userText.includes('lwd') || userText.includes('last working') || userText.includes('resigned');
+        const isChronologyQuery = userText.includes('chronology') || userText.includes('active with lwd') || userText.includes('doj');
+
+        if (isProbationQuery || isLwdQuery || isChronologyQuery) {
+          for (const file of uploadedFiles) {
+            const isEmpFile = file.holds?.includes('Employee') || file.name.toLowerCase().includes('employee') || file.name.toLowerCase().includes('export');
+            if (isEmpFile) {
+              const qRes = queryEmployeeData(file.parsedRows || [], {
+                fileId: file.id,
+                fileName: file.name,
+                status: isProbationQuery ? 'Probation' : null,
+                hasConfirmationDate: isProbationQuery ? true : null,
+                hasLwd: isLwdQuery ? true : null,
+                checkChronology: true,
+                includePii: false
+              });
+              if (qRes.verified) {
+                verifiedDatasetQueryContext += formatQueryResultForAi(qRes) + '\n';
+              }
+            }
+          }
+        }
+      } else if (empIdMatches && empIdMatches.length > 0) {
+        // Explicitly notify assistant that raw dataset is unavailable so it does not guess
+        verifiedDatasetQueryContext += formatQueryResultForAi({
+          verified: false,
+          message: 'No uploaded raw employee dataset available to verify requested employee facts.'
+        }) + '\n';
+      }
+
+      // 3. Query Entity Matcher (Deep lookups for any mentioned employee or store in LMS API)
       const userText = normalizedMessages.map((m) => m.content || '').join(' ').toLowerCase();
       let matchedEntitiesContext = '';
 
@@ -283,7 +338,7 @@ ${idx + 1}. ${b.name || 'Store'} (locCode: ${b.locCode || 'N/A'}):
    - Staff Count: ${b.staffCount || 0}
    - Logged Footfall: ${b.footfall || 0}
    - Walk-ins Count: ${b.walkinsCount || 0}
-   - Audit Score: ${b.auditScore || 85}%
+   - Audit Score: ${b.auditScore != null ? `${b.auditScore}%` : 'N/A'}
 `).join('')}
 
 ACTIVE MANAGEMENT ATTENTION ITEMS (${latestAnalysis?.attentionItems?.length || 0} detected):
@@ -297,11 +352,12 @@ ${idx + 1}. [${it.category}] ${it.title}:
 CONNECTED INGESTED DATASETS (${uploadedFiles && uploadedFiles.length > 0 ? uploadedFiles.length : 0} file(s)):
 ${filesTelemetryContext || (uploadedFiles && uploadedFiles.length > 0 ? uploadedFiles.map((f) => `• "${f.name}" (${f.rows} rows, holds: ${f.holds})`).join('\n') : 'No uploaded files. Operating on live synced store data.')}
 
+${verifiedDatasetQueryContext ? verifiedDatasetQueryContext : ''}
 ${matchedEntitiesContext ? `--- REAL-TIME DEEP ENTITY 360 TELEMETRY ---\n${matchedEntitiesContext}` : ''}
 ---------------------------------------------------------------------------------
 BEHAVIOR & REASONING RULES:
 1. DATA-GROUNDED EXECUTIVE ADVICE: When asked questions about workforce numbers, shifts, employees, attendance, rest turnaround intervals, overtime, payroll, or specific branches/roles, analyze the actual records and metrics above.
-2. ROOT CAUSE PRINCIPLE: Always distinguish between people issues, traffic issues, and target design issues. For instance, when asked why Store Perinthalmanna is lagging, clearly explain that footfall dropped 24% while conversion was 26.2%, pointing to external traffic rather than staff failure.
+2. ROOT CAUSE PRINCIPLE: Always distinguish between people issues, traffic issues, and target design issues based on actual store footfall, conversion, and quota metrics from the data above.
 3. CHAT-FRIENDLY SCANABILITY: Format responses for high readability in a compact chat window. Use clean bullet points, bold key numbers/names, and concise subheadings. Avoid giant '#' document headers or unnecessary '---' horizontal rules.
 `;
     } catch (dataErr) {
