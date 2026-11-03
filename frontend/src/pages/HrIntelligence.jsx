@@ -43,7 +43,9 @@ import {
   FileSpreadsheet,
   Loader2,
   ExternalLink,
-  Copy
+  Copy,
+  UserPlus,
+  Coins
 } from 'lucide-react';
 import {
   diagnoseHrIssue,
@@ -52,6 +54,109 @@ import {
 } from '../services/aiService';
 import FormattedChatMessage from '../components/FormattedChatMessage';
 import './HrIntelligence.css';
+
+// ChatGPT & Claude inspired Human Skeleton Loaders
+function SkeletonBlock({ width = '100%', height = '16px', borderRadius = '6px', style = {} }) {
+  return (
+    <div
+      className="human-skeleton-shimmer"
+      style={{
+        width,
+        height,
+        borderRadius,
+        ...style
+      }}
+    />
+  );
+}
+
+function SkeletonKpiCard() {
+  return (
+    <div className="hr-kpi-card human-skeleton-card">
+      <div className="hr-kpi-top">
+        <SkeletonBlock width="26px" height="26px" borderRadius="7px" />
+        <SkeletonBlock width="80px" height="12px" />
+      </div>
+      <div style={{ marginTop: '14px', marginBottom: '10px' }}>
+        <SkeletonBlock width="55px" height="26px" borderRadius="4px" />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <SkeletonBlock width="110px" height="11px" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonIssueCard() {
+  return (
+    <div className="hr-issue-card human-skeleton-card" style={{ cursor: 'default' }}>
+      <div className="hr-issue-card-top" style={{ marginBottom: '10px' }}>
+        <SkeletonBlock width="70px" height="20px" borderRadius="999px" />
+        <SkeletonBlock width="90px" height="18px" borderRadius="6px" />
+      </div>
+      <div style={{ marginBottom: '8px' }}>
+        <SkeletonBlock width="85%" height="16px" borderRadius="4px" />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+        <SkeletonBlock width="100%" height="12px" />
+        <SkeletonBlock width="65%" height="12px" />
+      </div>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <SkeletonBlock width="75px" height="13px" />
+        <SkeletonBlock width="65px" height="13px" />
+        <SkeletonBlock width="70px" height="13px" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonDetailCard() {
+  return (
+    <div className="hr-detail-card human-skeleton-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <SkeletonBlock width="85px" height="28px" borderRadius="8px" />
+        <SkeletonBlock width="120px" height="24px" borderRadius="6px" />
+      </div>
+      <div style={{ marginBottom: '10px' }}>
+        <SkeletonBlock width="70%" height="22px" borderRadius="5px" />
+      </div>
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '22px' }}>
+        <SkeletonBlock width="95px" height="14px" />
+        <SkeletonBlock width="110px" height="14px" />
+        <SkeletonBlock width="85px" height="14px" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '22px' }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="60px" height="11px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="45px" height="20px" style={{ marginBottom: '6px' }} />
+            <SkeletonBlock width="75px" height="10px" />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: '18px' }}>
+        <SkeletonBlock width="120px" height="15px" style={{ marginBottom: '10px' }} />
+        <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+          <SkeletonBlock width="90%" height="13px" style={{ marginBottom: '6px' }} />
+          <SkeletonBlock width="75%" height="13px" />
+        </div>
+      </div>
+      <div>
+        <SkeletonBlock width="130px" height="15px" style={{ marginBottom: '10px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="40%" height="14px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="85%" height="12px" />
+          </div>
+          <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+            <SkeletonBlock width="35%" height="14px" style={{ marginBottom: '8px' }} />
+            <SkeletonBlock width="80%" height="12px" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function HrIntelligence() {
   const navigate = useNavigate();
@@ -254,13 +359,13 @@ export default function HrIntelligence() {
     };
   }, [isAiAnalyzing]);
 
-  // Icon mapping for dynamic KPI tiles
+  // Icon mapping for dynamic KPI tiles exactly matching screenshot
   const kpiIconMap = {
-    issues: <Network size={14} />,
-    decisions: <FileText size={14} />,
-    monitored: <AppWindow size={14} />,
-    opportunities: <UserCheck size={14} />,
-    productivity: <Activity size={14} />
+    issues: <User size={13} />,
+    decisions: <Calendar size={13} />,
+    monitored: <Calendar size={13} />,
+    opportunities: <UserPlus size={13} />,
+    productivity: <Coins size={13} />
   };
 
   // Resolve attention items strictly from genuine AI-analyzed items (must have valid title)
@@ -268,68 +373,7 @@ export default function HrIntelligence() {
     ? liveAnalysis.attentionItems.filter((i) => i && typeof i.title === 'string' && i.title.trim().length > 0)
     : [];
 
-  // Extract or infer source CSV file for an issue
-  const getIssueSourceFile = (item) => {
-    if (!item) return '';
-    if (item.sourceFile && item.sourceFile.trim()) {
-      return item.sourceFile;
-    }
-    const combined = `${item.title || ''} ${item.description || ''} ${item.topic || ''} ${item.department || ''}`.toLowerCase();
-    
-    // Check for multi-dataset correlation first
-    if (
-      (combined.includes('correlation') || combined.includes('multi-dataset') || combined.includes('dual-dataset')) ||
-      (combined.includes('attendance') && combined.includes('sales')) ||
-      (combined.includes('roster') && combined.includes('revenue')) ||
-      (combined.includes('fatigue') && combined.includes('sales'))
-    ) {
-      return 'attendance_and_roster.csv + business_output_and_sales.csv';
-    }
-
-    // Check for attendance / roster telemetry
-    if (
-      combined.includes('attendance') ||
-      combined.includes('roster') ||
-      combined.includes('shift') ||
-      combined.includes('overtime') ||
-      combined.includes('rest violation') ||
-      combined.includes('rest interval') ||
-      combined.includes('fatigue') ||
-      combined.includes('productivity') ||
-      combined.includes('turnaround')
-    ) {
-      return 'attendance_and_roster.csv';
-    }
-
-    // Check for sales / store revenue telemetry
-    if (
-      combined.includes('sales') ||
-      combined.includes('revenue') ||
-      combined.includes('store') ||
-      combined.includes('branch') ||
-      combined.includes('footfall') ||
-      combined.includes('pos') ||
-      combined.includes('transaction') ||
-      combined.includes('conversion') ||
-      combined.includes('inventory')
-    ) {
-      return 'business_output_and_sales.csv';
-    }
-
-    // Check for employee master records
-    if (
-      combined.includes('employee') ||
-      combined.includes('resignation') ||
-      combined.includes('attrition') ||
-      combined.includes('notice') ||
-      combined.includes('headcount') ||
-      combined.includes('staff')
-    ) {
-      return 'employees_master.csv';
-    }
-
-    return liveAnalysis?.fileNames?.[0] || 'Connected Dataset';
-  };
+  const isWaitingForAi = isLoadingAnalysis || (isAiAnalyzing && resolvedAttentionItems.length === 0);
 
   const resolvedKpiMetrics = (liveAnalysis?.kpiMetrics && Array.isArray(liveAnalysis.kpiMetrics) && liveAnalysis.kpiMetrics.length > 0)
     ? liveAnalysis.kpiMetrics.map((kpi) => {
@@ -337,6 +381,7 @@ export default function HrIntelligence() {
         let trend = kpi.trend;
         if (kpi.id === 'issues') {
           val = String(resolvedAttentionItems.length);
+<<<<<<< HEAD
           trend = resolvedAttentionItems.length > 0
             ? `${resolvedAttentionItems.length} active risks across datasets`
             : (isAiAnalyzing ? 'Synthesizing telemetry...' : 'No active risks logged');
@@ -345,20 +390,37 @@ export default function HrIntelligence() {
           trend = resolvedAttentionItems.length > 0
             ? `${resolvedAttentionItems.length} management options ready for approval`
             : (isAiAnalyzing ? 'Synthesizing options...' : 'No pending decisions');
+=======
+          trend = resolvedAttentionItems.length > 0 ? `${resolvedAttentionItems.length} active risks` : 'No risks detected';
+        } else if (kpi.id === 'decisions') {
+          const decCount = resolvedAttentionItems.filter((i) => i.decisionOptions && i.decisionOptions.length > 0).length;
+          val = String(decCount);
+          trend = decCount > 0 ? `${decCount} ready for review` : 'No pending decisions';
+        } else if (kpi.id === 'monitored') {
+          val = kpi.value || '25';
+          trend = kpi.trend || '25 retail stores synced';
+        } else if (kpi.id === 'opportunities') {
+          const oppCount = resolvedAttentionItems.filter((i) => i.category === 'Opportunity').length;
+          val = String(oppCount);
+          trend = oppCount > 0 ? `${oppCount} optimization areas` : 'Awaiting prompt';
+        } else if (kpi.id === 'productivity') {
+          val = kpi.value || '—';
+          trend = kpi.trend || 'Target benchmark';
+>>>>>>> ExelData
         }
         return {
           ...kpi,
           value: val,
           trend: trend,
-          icon: kpiIconMap[kpi.id] || <Activity size={14} />
+          icon: kpiIconMap[kpi.id] || <Activity size={13} />
         };
       })
     : [
-        { id: 'issues', title: 'Issues Detected', value: '0', trend: 'No issues logged', trendPositive: true, colorClass: 'hr-kpi-icon-purple', icon: <Network size={14} /> },
-        { id: 'decisions', title: 'Awaited Decisions', value: '0', trend: 'No pending decisions', trendPositive: true, colorClass: 'hr-kpi-icon-red', icon: <FileText size={14} /> },
-        { id: 'monitored', title: 'Being Monitored', value: '0', trend: 'No active monitoring tasks', trendPositive: true, colorClass: 'hr-kpi-icon-green', icon: <AppWindow size={14} /> },
-        { id: 'opportunities', title: 'Opportunities', value: '0', trend: 'No opportunities detected', trendPositive: true, colorClass: 'hr-kpi-icon-orange', icon: <UserCheck size={14} /> },
-        { id: 'productivity', title: 'Avg. Productivity', value: '0%', trend: 'No benchmark data available', trendPositive: true, colorClass: 'hr-kpi-icon-blue', icon: <Activity size={14} /> }
+        { id: 'issues', title: 'Issues Detected', value: String(resolvedAttentionItems.length), trend: 'No risks detected', trendPositive: true, colorClass: 'hr-kpi-icon-purple', icon: <User size={13} /> },
+        { id: 'decisions', title: 'Awaited Decisions', value: '0', trend: 'No pending decisions', trendPositive: true, colorClass: 'hr-kpi-icon-red', icon: <Calendar size={13} /> },
+        { id: 'monitored', title: 'Being Monitored', value: '25', trend: '25 live stores synced', trendPositive: true, colorClass: 'hr-kpi-icon-green', icon: <Calendar size={13} /> },
+        { id: 'opportunities', title: 'Opportunities', value: '0', trend: 'Awaiting prompt', trendPositive: true, colorClass: 'hr-kpi-icon-orange', icon: <UserPlus size={13} /> },
+        { id: 'productivity', title: 'Avg. Productivity', value: '—', trend: 'Awaiting prompt', trendPositive: true, colorClass: 'hr-kpi-icon-blue', icon: <Coins size={13} /> }
       ];
 
   // Filter list
@@ -609,17 +671,20 @@ export default function HrIntelligence() {
   };
 
   return (
-    <div className="hr-page-container">
-      {/* 1. Page Header Row: Title, Breadcrumbs, Date & Export Actions */}
-      <div className="hr-page-header-row">
-        <div className="hr-page-title-area">
-          <h1 className="hr-main-page-title">HR Intelligence</h1>
-          <div className="hr-breadcrumbs">
-            <span>AI Workspace</span>
-            <span className="crumb-separator">&gt;</span>
-            <span className="hr-breadcrumb-current">HR Intelligence</span>
-          </div>
+    <div className="hr-page-container" style={{ position: 'relative' }}>
+      {/* Sleek Top Streaming Progress Line (ChatGPT / Claude / Linear aesthetic) */}
+      {(isLoadingAnalysis || isSubmittingPrompt || isAiAnalyzing) && (
+        <div className="human-streaming-progress-bar" />
+      )}
+
+      {/* 1. Page Header Row: Welcome Greeting on Left, Date & Export Actions on Right */}
+      <div className="hr-header-greeting-row">
+        <div className="hr-welcome-greeting-section">
+          <div className="hr-welcome-greeting-badge">WELCOME BACK</div>
+          <h2 className="hr-welcome-greeting-title">Here's what's happening in your workforce.</h2>
+          <p className="hr-welcome-greeting-sub">Key insights, trends and actions — all in one place.</p>
         </div>
+
         <div className="hr-page-header-actions">
           <button className="hr-date-btn hr-date-btn-shadow">
             <Calendar size={14} color="#64748b" />
@@ -675,381 +740,218 @@ export default function HrIntelligence() {
         </div>
       )}
 
-      {/* Live Claude AI Background Synthesis Progress Banner */}
-      {isAiAnalyzing && (
-        <div className="hr-ai-analyzing-live-banner">
-          <div className="hr-ai-analyzing-left">
-            <div className="hr-ai-analyzing-pulse-orb">
-              <Sparkles size={16} className="hr-ai-orb-icon" />
-            </div>
-            <div>
-              <div className="hr-ai-analyzing-headline">
-                <span>Claude AI Deep Intelligence Synthesis in Progress</span>
-                <span className="hr-ai-live-badge">
-                  <span className="hr-live-dot"></span>
-                  LIVE ANALYZING
-                </span>
+      {/* Top Banner Row: Live API Intelligence Prompt Engine + HR Health Score Card */}
+      <div className="hr-prompt-and-health-row">
+        {/* Left: Executive AI Live API Telemetry Prompt Bar */}
+        <div className="hr-api-prompt-bar-container">
+          <div className="hr-api-prompt-bar-header">
+            <div className="hr-api-prompt-title-wrap">
+              <div className="hr-api-prompt-sparkle-pill">
+                <Sparkles size={15} color="#7c3aed" className="hr-sparkle-animated" />
               </div>
-              <p className="hr-ai-analyzing-sub">
-                Correlating workforce records, shift rest intervals, and management impact projections across connected datasets. Diagnostics and recommendations will update automatically once synthesis is complete.
-              </p>
-            </div>
-          </div>
-          <div className="hr-ai-analyzing-right">
-            <Loader2 size={15} className="hr-spin-animation" />
-            <span>Synthesizing Telemetry...</span>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Top Banner Grid: Hero Banner + AI Ask Pill & HR Health Score */}
-      <div className="hr-top-banner-grid">
-        {/* Left Banner Wrapper */}
-        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          {/* Left Banner Card */}
-          <div className="hr-welcome-banner" style={{ flex: 1 }}>
-            <div className="hr-welcome-left">
-              <div className="hr-banner-icon-wrapper">
-                <Settings size={22} />
-              </div>
-              <div className="hr-banner-text">
-                <h2>HR Intelligence</h2>
-                <p>Understand what's happening in your workforce, why it's happening, and what to do next.</p>
-                {liveAnalysis?.adminPromptApplied && liveAnalysis.adminPromptApplied !== 'Autonomous Multi-Dataset Synthesis' && liveAnalysis.adminPromptApplied !== 'Autonomous Analysis' && (
-                  <div className="hr-two-brain-pills">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 600, padding: '4px 10px', borderRadius: '16px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
-                      <Sparkles size={12} />
-                      <span>Prompt Focus: "{liveAnalysis.adminPromptApplied}"</span>
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Background Illustration Graphic */}
-            <div className="hr-banner-illustration">
-              <img src={bannerImg} alt="Analytics graphic" style={{ width: '100%', height: '100%', objectFit: 'contain', transform: 'scale(1.8) translate(-1%, 10%)' }} />
-            </div>
-          </div>
-
-          {/* Row of 5 Metric KPI Cards */}
-          <div className="hr-metrics-grid" style={{ marginTop: '12px' }}>
-            {resolvedKpiMetrics.map((kpi, idx) => (
-              <div key={kpi.id || idx} className="hr-kpi-card">
-                <div className="hr-kpi-top">
-                  <span className="hr-kpi-label">{kpi.title}</span>
-                  <div className={`hr-kpi-icon-pill ${kpi.colorClass || 'hr-kpi-icon-blue'}`}>
-                    {kpi.icon || <Activity size={14} />}
-                  </div>
-                </div>
-                <div className="hr-kpi-val">{kpi.value}</div>
-                <div className="hr-kpi-trend">
-                  <ArrowUpRight size={14} />
-                  <span>{kpi.trend}</span>
+              <div>
+                <div className="hr-api-prompt-title">Live API Intelligence Prompt Engine</div>
+                <div className="hr-api-prompt-subtitle">
+                  Prompt or filter live retail LMS telemetry across 25 stores and 204 staff profiles (e.g., target deficits, specific stores, consultant skills)
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Column: AI Prompt Pill & HR Health Score Card */}
-        <div className="hr-top-right-column" style={{ paddingTop: '0' }}>
-          {/* AI Search / Prompt Pill */}
-          <form className="hr-ai-ask-pill" onSubmit={handleAskAi} onClick={() => !showChatPopup && setShowChatPopup(true)}>
-            <div className="hr-ai-avatar">
-              <img src={botLogo} alt="AI Bot" style={{ width: '110%', height: '110%', objectFit: 'contain' }} />
             </div>
-            <input
-              type="text"
-              className="hr-ai-input-text"
-              placeholder="Ask me anything about your business..."
-              value={aiQuery}
-              onChange={(e) => setAiQuery(e.target.value)}
-              onFocus={() => setShowChatPopup(true)}
-              style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%' }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {isAiAnalyzing && (
+                <div className="human-status-pill">
+                  <span className="human-pulse-dot" />
+                  <span className="human-status-text">
+                    {activeApiPrompt ? `Synthesizing "${activeApiPrompt}"` : 'Synthesizing live telemetry'}
+                  </span>
+                </div>
+              )}
+              {activeApiPrompt && (
+                <div className="hr-api-active-badge-wrap">
+                  <span className="hr-api-active-badge">
+                    <span className="hr-live-dot" />
+                    Active Focus: "{activeApiPrompt}"
+                  </span>
+                  <button
+                    type="button"
+                    className="hr-api-reset-prompt-btn"
+                    onClick={handleResetApiPrompt}
+                    title="Reset to default unprompted telemetry"
+                    disabled={isSubmittingPrompt}
+                  >
+                    <RotateCw size={11} />
+                    <span>Reset View</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <form
+            className="hr-api-prompt-input-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleApplyApiPrompt(apiPromptInput);
+            }}
+          >
+            <div className="hr-api-prompt-input-wrapper">
+              <Search size={15} color="#94a3b8" />
+              <input
+                type="text"
+                className="hr-api-prompt-input"
+                placeholder="Prompt AI on live API data (e.g. 'Show stores lagging on quota < 80%', 'Analyze Suitor Guy Edappally', 'Focus on accessories conversion vs training')..."
+                value={apiPromptInput}
+                onChange={(e) => setApiPromptInput(e.target.value)}
+              />
+              {apiPromptInput && (
+                <button
+                  type="button"
+                  className="hr-api-clear-input-btn"
+                  onClick={() => setApiPromptInput('')}
+                  title="Clear input"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="hr-api-prompt-submit-btn"
+              disabled={isSubmittingPrompt || (!apiPromptInput.trim() && !activeApiPrompt)}
+            >
+              {isSubmittingPrompt ? (
+                <>
+                  <Loader2 size={14} className="hr-spin-animation" />
+                  <span>Analyzing API...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  <span>Analyze API</span>
+                </>
+              )}
+            </button>
           </form>
 
-          {/* Floating Luxury Claude AI Copilot Modal */}
-          {showChatPopup && (
-            <div className="hr-inline-chat-popup">
-              {/* Header */}
-              <div className="hr-inline-chat-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div className="hr-inline-chat-avatar">
-                    <img src={botLogo} alt="AI Bot" style={{ width: '22px', height: '22px', objectFit: 'contain' }} />
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#ffffff', margin: 0, letterSpacing: '-0.2px' }}>
-                      Claude AI Workforce Copilot
-                    </h4>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }}></span>
-                      <span style={{ fontSize: '10.5px', color: '#a7f3d0', fontWeight: '500' }}>Claude 3.5 Active</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <button
-                    type="button"
-                    className="hr-chat-close-btn"
-                    onClick={() => navigate('/assistant')}
-                    title="Open Full Assistant Canvas"
-                  >
-                    <ArrowUpRight size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="hr-chat-close-btn"
-                    onClick={() => setShowChatPopup(false)}
-                    title="Close"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Messages Body */}
-              <div className="hr-inline-chat-messages">
-                {chatMessages.map((msg) => (
-                  <div key={msg.id} className={`hr-chat-msg-row ${msg.sender}`}>
-                    <div className="hr-chat-msg-bubble">
-                      {msg.sender === 'assistant' ? (
-                        <FormattedChatMessage content={msg.text} />
-                      ) : (
-                        <p>{msg.text}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {isTyping && (
-                  <div className="hr-chat-msg-row assistant">
-                    <div className="hr-chat-msg-bubble hr-chat-typing-indicator">
-                      <Sparkles size={13} color="#0ca678" />
-                      <span>Claude is synthesizing workforce telemetry...</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Prompt Chips */}
-              <div className="hr-chat-quick-chips">
-                <button
-                  type="button"
-                  className="hr-chat-chip"
-                  onClick={() => {
-                    const text = 'What are our primary workforce risks and anomalies right now?';
-                    setAiQuery(text);
-                  }}
-                >
-                  Workforce risks & anomalies
-                </button>
-                <button
-                  type="button"
-                  className="hr-chat-chip"
-                  onClick={() => {
-                    const text = 'Analyze labor expenditure and overtime allocation across departments';
-                    setAiQuery(text);
-                  }}
-                >
-                  Analyze labor expenditure
-                </button>
-                <button
-                  type="button"
-                  className="hr-chat-chip"
-                  onClick={() => {
-                    const text = 'Evaluate shift turnaround rest intervals and compliance';
-                    setAiQuery(text);
-                  }}
-                >
-                  Shift rest intervals
-                </button>
-              </div>
-
-              {/* Input Dock */}
-              <form className="hr-inline-chat-input-row" onSubmit={handleAskAi}>
-                <div className="hr-chat-input-pill">
-                  <input
-                    type="text"
-                    placeholder="Ask Claude a question..."
-                    value={aiQuery}
-                    onChange={(e) => setAiQuery(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="hr-chat-send-btn"
-                  title="Send to Claude"
-                  disabled={!aiQuery.trim() || isTyping}
-                >
-                  <Send size={13} />
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* HR Health Score Card */}
-          <div className="hr-health-score-card">
-            <div className="hr-health-header">
-              <span className="hr-health-title">HR Health Score</span>
-              <span className="hr-health-badge">
-                {liveAnalysis?.healthStatus || (analysisError ? 'API Error' : 'No Data')}
-              </span>
-            </div>
-            <div className="hr-health-value">
-              {liveAnalysis?.healthScore
-                ? (String(liveAnalysis.healthScore).includes('%') ? liveAnalysis.healthScore : `${liveAnalysis.healthScore}%`)
-                : (analysisError ? 'ERR' : '-')}
-            </div>
-            <div className="hr-health-footer">
-              <TrendingUp size={14} />
-              <span>
-                {analysisError
-                  ? 'API connection failure'
-                  : resolvedAttentionItems.length > 0
-                    ? `${resolvedAttentionItems.length} area${resolvedAttentionItems.length === 1 ? '' : 's'} need attention`
-                    : 'No active issues detected'}
-              </span>
-            </div>
+          {/* 1-Click Suggestion Chips */}
+          <div className="hr-api-prompt-chips">
+            <span className="hr-api-chips-label">Quick Inquiries:</span>
+            <button
+              type="button"
+              className={`hr-api-chip ${activeApiPrompt === 'Top Lagging Stores' ? 'active' : ''}`}
+              onClick={() => {
+                setApiPromptInput('Top Lagging Stores');
+                handleApplyApiPrompt('Top Lagging Stores');
+              }}
+            >
+              🎯 Top Lagging Stores
+            </button>
+            <button
+              type="button"
+              className={`hr-api-chip ${activeApiPrompt === 'Suitor Guy Edappally' ? 'active' : ''}`}
+              onClick={() => {
+                setApiPromptInput('Suitor Guy Edappally');
+                handleApplyApiPrompt('Suitor Guy Edappally');
+              }}
+            >
+              🏬 Suitor Guy Edappally
+            </button>
+            <button
+              type="button"
+              className={`hr-api-chip ${activeApiPrompt === 'Accessories Basket Gap' ? 'active' : ''}`}
+              onClick={() => {
+                setApiPromptInput('Accessories Basket Gap');
+                handleApplyApiPrompt('Accessories Basket Gap');
+              }}
+            >
+              👔 Accessories Basket Gap
+            </button>
+            <button
+              type="button"
+              className={`hr-api-chip ${activeApiPrompt === 'Camera Audit Discrepancies' ? 'active' : ''}`}
+              onClick={() => {
+                setApiPromptInput('Camera Audit Discrepancies');
+                handleApplyApiPrompt('Camera Audit Discrepancies');
+              }}
+            >
+              📹 Camera Audit Discrepancies
+            </button>
+            {activeApiPrompt && (
+              <button
+                type="button"
+                className="hr-api-chip hr-api-chip-reset"
+                onClick={handleResetApiPrompt}
+              >
+                🔄 Reset to Default
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Right: HR Health Score Card */}
+        <div className="hr-health-score-card">
+          {isWaitingForAi ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <SkeletonBlock width="95px" height="13px" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                <SkeletonBlock width="60px" height="20px" borderRadius="999px" style={{ background: 'rgba(255,255,255,0.2)' }} />
+              </div>
+              <SkeletonBlock width="75px" height="34px" borderRadius="6px" style={{ background: 'rgba(255,255,255,0.25)', margin: '4px 0' }} />
+              <SkeletonBlock width="140px" height="12px" style={{ background: 'rgba(255,255,255,0.18)' }} />
+            </div>
+          ) : (
+            <>
+              <div className="hr-health-header">
+                <span className="hr-health-title">HR Health Score</span>
+                <span className="hr-health-badge">
+                  {resolvedAttentionItems.length > 0
+                    ? (liveAnalysis?.healthStatus || 'Needs Attention')
+                    : (analysisError ? 'API Error' : 'Standby')}
+                </span>
+              </div>
+              <div className="hr-health-value">
+                {resolvedAttentionItems.length > 0 && liveAnalysis?.healthScore && liveAnalysis.healthScore !== 'N/A'
+                  ? (String(liveAnalysis.healthScore).includes('%') ? liveAnalysis.healthScore : `${liveAnalysis.healthScore}%`)
+                  : (analysisError ? 'ERR' : '—')}
+              </div>
+              <div className="hr-health-footer">
+                <TrendingUp size={14} />
+                <span>
+                  {analysisError
+                    ? 'API connection failure'
+                    : resolvedAttentionItems.length > 0
+                      ? `${resolvedAttentionItems.length} area${resolvedAttentionItems.length === 1 ? '' : 's'} need attention`
+                      : 'Awaiting prompt analysis'}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Executive AI Live API Telemetry Prompt Bar */}
-      <div className="hr-api-prompt-bar-container">
-        <div className="hr-api-prompt-bar-header">
-          <div className="hr-api-prompt-title-wrap">
-            <div className="hr-api-prompt-sparkle-pill">
-              <Sparkles size={15} color="#7c3aed" className="hr-sparkle-animated" />
-            </div>
-            <div>
-              <div className="hr-api-prompt-title">Live API Intelligence Prompt Engine</div>
-              <div className="hr-api-prompt-subtitle">
-                Prompt or filter live retail LMS telemetry across 25 stores and 204 staff profiles (e.g., target deficits, specific stores, consultant skills)
+      {/* Row of 5 Metric KPI Cards */}
+      <div className="hr-metrics-grid">
+        {isWaitingForAi ? (
+          [1, 2, 3, 4, 5].map((idx) => <SkeletonKpiCard key={idx} />)
+        ) : (
+          resolvedKpiMetrics.map((kpi, idx) => (
+            <div key={kpi.id || idx} className="hr-kpi-card">
+              <div className="hr-kpi-top">
+                <div className={`hr-kpi-icon-pill ${kpi.colorClass || 'hr-kpi-icon-blue'}`}>
+                  {kpi.icon || <Activity size={13} />}
+                </div>
+                <span className="hr-kpi-label">{kpi.title}</span>
+              </div>
+              <div className="hr-kpi-val">{kpi.value}</div>
+              <div className="hr-kpi-trend">
+                <div className="hr-kpi-trend-left">
+                  <ArrowUpRight size={13} />
+                  <span>{kpi.trend || '3%'}</span>
+                </div>
+                <span className="hr-kpi-trend-sub">vs last month</span>
               </div>
             </div>
-          </div>
-          {activeApiPrompt && (
-            <div className="hr-api-active-badge-wrap">
-              <span className="hr-api-active-badge">
-                <span className="hr-live-dot" />
-                Active Focus: "{activeApiPrompt}"
-              </span>
-              <button
-                type="button"
-                className="hr-api-reset-prompt-btn"
-                onClick={handleResetApiPrompt}
-                title="Reset to default unprompted telemetry"
-                disabled={isSubmittingPrompt}
-              >
-                <RotateCw size={11} />
-                <span>Reset View</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        <form
-          className="hr-api-prompt-input-row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleApplyApiPrompt(apiPromptInput);
-          }}
-        >
-          <div className="hr-api-prompt-input-wrapper">
-            <Search size={15} color="#94a3b8" />
-            <input
-              type="text"
-              className="hr-api-prompt-input"
-              placeholder="Prompt AI on live API data (e.g. 'Show stores lagging on quota < 80%', 'Analyze Suitor Guy Edappally', 'Focus on accessories conversion vs training')..."
-              value={apiPromptInput}
-              onChange={(e) => setApiPromptInput(e.target.value)}
-            />
-            {apiPromptInput && (
-              <button
-                type="button"
-                className="hr-api-clear-input-btn"
-                onClick={() => setApiPromptInput('')}
-                title="Clear input"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-          <button
-            type="submit"
-            className="hr-api-prompt-submit-btn"
-            disabled={isSubmittingPrompt || (!apiPromptInput.trim() && !activeApiPrompt)}
-          >
-            {isSubmittingPrompt ? (
-              <>
-                <Loader2 size={14} className="hr-spin-animation" />
-                <span>Analyzing API...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} />
-                <span>Analyze API</span>
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* 1-Click Suggestion Chips */}
-        <div className="hr-api-prompt-chips">
-          <span className="hr-api-chips-label">Quick Inquiries:</span>
-          <button
-            type="button"
-            className={`hr-api-chip ${activeApiPrompt === 'Top Lagging Stores' ? 'active' : ''}`}
-            onClick={() => {
-              setApiPromptInput('Top Lagging Stores');
-              handleApplyApiPrompt('Top Lagging Stores');
-            }}
-          >
-            🎯 Top Lagging Stores
-          </button>
-          <button
-            type="button"
-            className={`hr-api-chip ${activeApiPrompt === 'Suitor Guy Edappally' ? 'active' : ''}`}
-            onClick={() => {
-              setApiPromptInput('Suitor Guy Edappally');
-              handleApplyApiPrompt('Suitor Guy Edappally');
-            }}
-          >
-            🏬 Suitor Guy Edappally
-          </button>
-          <button
-            type="button"
-            className={`hr-api-chip ${activeApiPrompt === 'Accessories Basket Gap' ? 'active' : ''}`}
-            onClick={() => {
-              setApiPromptInput('Accessories Basket Gap');
-              handleApplyApiPrompt('Accessories Basket Gap');
-            }}
-          >
-            👔 Accessories Basket Gap
-          </button>
-          <button
-            type="button"
-            className={`hr-api-chip ${activeApiPrompt === 'Camera Audit Discrepancies' ? 'active' : ''}`}
-            onClick={() => {
-              setApiPromptInput('Camera Audit Discrepancies');
-              handleApplyApiPrompt('Camera Audit Discrepancies');
-            }}
-          >
-            📹 Camera Audit Discrepancies
-          </button>
-          {activeApiPrompt && (
-            <button
-              type="button"
-              className="hr-api-chip hr-api-chip-reset"
-              onClick={handleResetApiPrompt}
-            >
-              🔄 Reset to Default
-            </button>
-          )}
-        </div>
+          ))
+        )}
       </div>
 
       {/* 3. Main Split Grid (Faithful to Figma layout) */}
@@ -1118,11 +1020,17 @@ export default function HrIntelligence() {
 
           {/* List of Issue Cards */}
           <div className="hr-issue-cards-list">
-            {filteredItems.length === 0 ? (
+            {isWaitingForAi ? (
+              <>
+                <SkeletonIssueCard />
+                <SkeletonIssueCard />
+                <SkeletonIssueCard />
+              </>
+            ) : filteredItems.length === 0 ? (
               <div
                 className="hr-empty-state-card"
                 style={{
-                  padding: '36px 20px',
+                  padding: '40px 24px',
                   textAlign: 'center',
                   background: '#ffffff',
                   borderRadius: '12px',
@@ -1130,36 +1038,64 @@ export default function HrIntelligence() {
                   marginTop: '12px'
                 }}
               >
-                <AlertCircle size={32} color="#0ca678" style={{ margin: '0 auto 12px' }} />
-                <h4 style={{ margin: '0 0 6px', fontSize: '15px', color: '#1e293b', fontWeight: 600 }}>
-                  {!liveAnalysis || (liveAnalysis.attentionItems || []).length === 0
-                    ? 'No Datasets Connected'
-                    : 'No Issues in Selected Filter'}
-                </h4>
-                <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
-                  {!liveAnalysis || (liveAnalysis.attentionItems || []).length === 0
-                    ? 'All dataset telemetry has been cleared. Connect an Employee Master, Attendance Roster, or Sales CSV in Data Management to activate AI diagnostics.'
-                    : 'All workforce metrics and attendance rosters for this filter are currently within nominal thresholds.'}
-                </p>
-                <button
-                  onClick={() => navigate('/intelligence/hr/data')}
+                <div
                   style={{
-                    display: 'inline-flex',
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '50%',
+                    background: '#f5f3ff',
+                    display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 16px',
-                    background: '#0ca678',
-                    color: '#fff',
-                    borderRadius: '8px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '13px'
+                    justifyContent: 'center',
+                    margin: '0 auto 14px'
                   }}
                 >
-                  <UploadCloud size={16} />
-                  <span>Go to Data Management</span>
-                </button>
+                  <Sparkles size={26} color="#7c3aed" />
+                </div>
+                <h4 style={{ margin: '0 0 6px', fontSize: '15px', color: '#1e293b', fontWeight: 600 }}>
+                  {resolvedAttentionItems.length === 0
+                    ? 'Live Retail API Connected • Awaiting Prompt'
+                    : 'No Issues in Selected Filter'}
+                </h4>
+                <p style={{ margin: '0 auto 18px', fontSize: '13px', color: '#64748b', lineHeight: 1.5, maxWidth: '420px' }}>
+                  {resolvedAttentionItems.length === 0
+                    ? 'Live telemetry across 25 retail branches and 204 staff profiles is synchronized. Enter a prompt above or choose a quick inquiry to generate AI management diagnostics.'
+                    : 'All workforce metrics and attendance rosters for this filter are currently within nominal thresholds.'}
+                </p>
+                {resolvedAttentionItems.length === 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className="hr-api-chip"
+                      onClick={() => {
+                        setApiPromptInput('Top Lagging Stores');
+                        handleApplyApiPrompt('Top Lagging Stores');
+                      }}
+                    >
+                      🎯 Top Lagging Stores
+                    </button>
+                    <button
+                      type="button"
+                      className="hr-api-chip"
+                      onClick={() => {
+                        setApiPromptInput('Suitor Guy Edappally');
+                        handleApplyApiPrompt('Suitor Guy Edappally');
+                      }}
+                    >
+                      🏬 Suitor Guy Edappally
+                    </button>
+                    <button
+                      type="button"
+                      className="hr-api-chip"
+                      onClick={() => {
+                        setApiPromptInput('Accessories Basket Gap');
+                        handleApplyApiPrompt('Accessories Basket Gap');
+                      }}
+                    >
+                      👔 Accessories Basket Gap
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               filteredItems.map((item) => (
@@ -1177,33 +1113,29 @@ export default function HrIntelligence() {
                       ● {item.priority || 'High Priority'}
                     </span>
                     <span className="hr-status-badge-outline">{item.status || 'Needs investigation'}</span>
-                    <span className="hr-source-csv-tag" title={`Source CSV: ${getIssueSourceFile(item)}`}>
-                      <FileSpreadsheet size={11} color="#065f46" />
-                      <span>{getIssueSourceFile(item)}</span>
-                    </span>
                   </div>
 
                   <h4 className="hr-issue-card-title">{item.title}</h4>
                   <p className="hr-issue-card-desc">{item.description}</p>
 
-                  <div className="hr-issue-card-meta">
-                    <div className="hr-meta-item" style={{ color: '#047857', fontWeight: 600 }}>
-                      <FileSpreadsheet size={12} color="#0ca678" />
-                      <span>{getIssueSourceFile(item)}</span>
+                  {item.branch && (
+                    <div className="hr-issue-card-meta">
+                      <div className="hr-meta-item">
+                        <Building2 size={13} color="#d97706" />
+                        <span>{item.branch}</span>
+                      </div>
+                      {item.topic && (
+                        <div className="hr-meta-item">
+                          <AlertTriangle size={13} color="#d97706" />
+                          <span>{item.topic}</span>
+                        </div>
+                      )}
+                      <div className="hr-meta-item">
+                        <Calendar size={13} color="#d97706" />
+                        <span>{item.dateRange || dateRange}</span>
+                      </div>
                     </div>
-                    <div className="hr-meta-item">
-                      <Building2 size={13} />
-                      <span>{item.branch || 'All Branches'}</span>
-                    </div>
-                    <div className="hr-meta-item">
-                      <ShieldAlert size={13} />
-                      <span>{item.topic || 'Workforce Risk'}</span>
-                    </div>
-                    <div className="hr-meta-item">
-                      <Calendar size={13} />
-                      <span>{item.dateRange || dateRange}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               ))
             )}
@@ -1211,7 +1143,9 @@ export default function HrIntelligence() {
         </div>
 
         {/* Right Column: Detailed Investigation View */}
-        {!selectedItem ? (
+        {isWaitingForAi ? (
+          <SkeletonDetailCard />
+        ) : !selectedItem ? (
           <div
             className="hr-detail-card"
             style={{
@@ -1224,36 +1158,30 @@ export default function HrIntelligence() {
               minHeight: '450px'
             }}
           >
-            <BrainCircuit size={48} color="#0ca678" style={{ marginBottom: '16px' }} />
+            <div
+              style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                background: '#f5f3ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px'
+              }}
+            >
+              <BrainCircuit size={32} color="#7c3aed" />
+            </div>
             <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0' }}>
               {resolvedAttentionItems.length === 0
-                ? 'Workforce Diagnostics on Standby'
+                ? 'AI Workforce Diagnostics on Standby'
                 : 'Select an Issue to Investigate'}
             </h3>
             <p style={{ fontSize: '13.5px', color: '#64748b', maxWidth: '440px', margin: '0 0 20px 0', lineHeight: 1.5 }}>
               {resolvedAttentionItems.length === 0
-                ? 'The HR Dashboard analyzes workforce data (Employees, Attendance, Shift Rosters). When only sales data is connected, upload your Employee Master CSV in Data Management to activate live employee retention analytics, risk scoring, and productivity diagnostics.'
+                ? 'Telemetry across 25 retail branches (targets, net sales, footfall, audit discrepancies) and 204 employee records is active. Enter an executive prompt above to identify anomalies, root causes, and decision options.'
                 : 'Click on any detected attention item in the left column to inspect telemetry evidence, Claude AI root causes, and decision options.'}
             </p>
-            <button
-              onClick={() => navigate('/intelligence/hr/data')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '9px 18px',
-                background: '#0f172a',
-                color: '#fff',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '13px'
-              }}
-            >
-              <UploadCloud size={16} />
-              <span>Go to Data Management</span>
-            </button>
           </div>
         ) : (
           <div className="hr-detail-card">
@@ -1265,9 +1193,9 @@ export default function HrIntelligence() {
               </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {isAiAnalyzing && (
-                  <span className="hr-detail-ai-analyzing-pill">
-                    <Loader2 size={11} className="hr-spin-animation" />
-                    <span>Claude AI Synthesizing...</span>
+                  <span className="human-detail-status-pill">
+                    <span className="human-pulse-dot" />
+                    <span>Enriching telemetry</span>
                   </span>
                 )}
                 <span className="hr-status-badge-outline" style={{ padding: '3px 12px' }}>
@@ -1279,34 +1207,18 @@ export default function HrIntelligence() {
             {/* Title & Metadata */}
             <div>
               <h2 className="hr-detail-title">{selectedItem.title}</h2>
-              <div className="hr-detail-meta-row" style={{ marginTop: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                <div
-                  className="hr-meta-item"
-                  style={{
-                    color: '#065f46',
-                    background: '#ecfdf5',
-                    border: '1px solid #a7f3d0',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    fontSize: '12px'
-                  }}
-                  title={`Source Dataset: ${getIssueSourceFile(selectedItem)}`}
-                >
-                  <FileSpreadsheet size={13} color="#0ca678" />
-                  <span>Source CSV: {getIssueSourceFile(selectedItem)}</span>
+              <div className="hr-detail-meta-row" style={{ marginTop: '10px' }}>
+                <div className="hr-meta-item">
+                  <Building2 size={14} color="#d97706" />
+                  <span>{selectedItem.branch || 'All branches'}</span>
                 </div>
                 <div className="hr-meta-item">
-                  <Building2 size={14} />
-                  <span>{selectedItem.branch || 'All Branches'}</span>
+                  <AlertTriangle size={14} color="#d97706" />
+                  <span>{selectedItem.topic || 'Employee Retention & Attrition'}</span>
                 </div>
                 <div className="hr-meta-item">
-                  <ShieldAlert size={14} />
-                  <span>{selectedItem.topic || 'Workforce Risk'}</span>
-                </div>
-                <div className="hr-meta-item">
-                  <Calendar size={14} />
-                  <span>{selectedItem.dateRange || dateRange}</span>
+                  <Calendar size={14} color="#d97706" />
+                  <span>{selectedItem.dateRange || dateRange || 'Current Period'}</span>
                 </div>
               </div>
             </div>
@@ -1316,7 +1228,7 @@ export default function HrIntelligence() {
               <span className={`hr-priority-tag ${selectedItem.priority?.includes('Low') ? 'hr-priority-low' : 'hr-priority-high'}`}>
                 ● {selectedItem.priority || 'High Priority'}
               </span>
-              <span className="hr-confidence-badge">Confidence: {selectedItem.confidence || '90%'}</span>
+              <span className="hr-confidence-badge">Confidence: {selectedItem.confidence || 'N/A'}</span>
             </div>
 
             {/* All 6 Navigation Tabs */}
@@ -1363,25 +1275,21 @@ export default function HrIntelligence() {
                   <div className="hr-impact-cards-grid">
                     <div className="hr-impact-card">
                       <div className="hr-impact-card-header">
-                        <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#ffedd5', color: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Users size={14} />
-                        </div>
+                        <Target size={16} color="#d97706" />
                         <span>Workforce continuity</span>
                       </div>
                       <p className="hr-impact-card-p">
-                        Vacancies, sudden exits, and scheduling fatigue increase replacement costs, lower service capacity, and risk operational bottlenecks.
+                        {selectedItem.impactContinuity || 'Vacancies and replacement periods may affect team capacity and service delivery.'}
                       </p>
                     </div>
 
                     <div className="hr-impact-card">
                       <div className="hr-impact-card-header">
-                        <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <AlertTriangle size={14} />
-                        </div>
+                        <AlertTriangle size={16} color="#dc2626" />
                         <span>Business performance</span>
                       </div>
                       <p className="hr-impact-card-p">
-                        Workforce imbalances directly affect store conversion, labor cost ratios, customer experience, and branch profitability.
+                        {selectedItem.impactPerformance || 'Investigate whether turnover is affecting sales productivity, customer experience or branch targets.'}
                       </p>
                     </div>
                   </div>
