@@ -32,7 +32,16 @@ import {
   Check,
   X,
   PanelLeft,
-  ShieldCheck
+  ShieldCheck,
+  Home,
+  Compass,
+  BookOpen,
+  Square,
+  Paperclip,
+  Lightbulb,
+  Wand2,
+  Globe,
+  ChevronDown
 } from 'lucide-react';
 import {
   sendChatMessage,
@@ -518,127 +527,176 @@ export default function AiAssistant() {
     return groupConversationsByDate(filteredConversations);
   }, [filteredConversations]);
 
-  return (
-    <div
-      className={`ai-assistant-container ${!isHistoryOpen ? 'history-collapsed' : ''} ${
-        !isContextOpen ? 'context-collapsed' : ''
-      }`}
-    >
-      {/* =========================================================================
-          LEFT COLUMN: CHAT HISTORY SIDEBAR (ChatGPT / Claude Style)
-      ========================================================================= */}
-      {isHistoryOpen && (
-        <aside className="ai-history-sidebar">
-          {/* + New Consultation Button */}
-          <button
-            type="button"
-            id="ai-new-chat-btn"
-            className="ai-new-chat-btn"
-            onClick={handleNewChat}
-            title="Start a new consultation session"
-          >
-            <Plus size={16} />
-            <span>New Consultation</span>
-          </button>
+  // Active navigation tab on the left sidebar
+  const [activeNavTab, setActiveNavTab] = useState('Home');
+  const [activeModelMenuOpen, setActiveModelMenuOpen] = useState(false);
 
-          {/* Search past discussions */}
-          <div className="ai-history-search-wrap">
-            <Search size={13} className="ai-history-search-icon" />
-            <input
-              type="text"
-              className="ai-history-search-input"
-              placeholder="Search discussions..."
-              value={historySearch}
-              onChange={(e) => setHistorySearch(e.target.value)}
-            />
+  // Selected prompt mode chip (Reasoning, Create Image, Deep Research)
+  const [activeChip, setActiveChip] = useState('Reasoning');
+
+  return (
+    <div className="bee-window-container">
+      {/* 1. TOP WINDOW TAB BAR (macOS / browser pill tab style from mockup) */}
+      <div className="bee-window-topbar">
+        <div className="bee-topbar-tabs-left">
+          <button type="button" className="bee-window-tab-add" title="New Tab" onClick={handleNewChat}>
+            <Plus size={13} />
+          </button>
+          <div className="bee-window-tab">
+            <span className="bee-tab-dot-orange"></span>
+            <span className="bee-tab-title">Brynex | Workforce</span>
+            <button type="button" className="bee-tab-close" onClick={(e) => { e.stopPropagation(); }}>
+              <X size={11} />
+            </button>
+          </div>
+          <div className="bee-window-tab">
+            <span className="bee-tab-badge-blue">E</span>
+            <span className="bee-tab-title">Executive Studio</span>
+          </div>
+          <div className="bee-window-tab active">
+            <span className="bee-tab-icon-logo">
+              <Sparkles size={12} color="#00a876" />
+            </span>
+            <span className="bee-tab-title">Brynex AI</span>
+            <button type="button" className="bee-tab-close" onClick={handleNewChat}>
+              <X size={11} />
+            </button>
+          </div>
+        </div>
+
+        {/* Right window control buttons */}
+        <div className="bee-topbar-window-controls">
+          <button type="button" className="bee-win-btn" title="Minimize">
+            <span>&minus;</span>
+          </button>
+          <button type="button" className="bee-win-btn" title="Maximize">
+            <Square size={10} />
+          </button>
+          <button type="button" className="bee-win-btn close" title="Close" onClick={() => navigate('/intelligence/hr')}>
+            <X size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* 2. INNER APPLICATION WORKSPACE (Split Left Sidebar + Main Canvas) */}
+      <div className="bee-app-body">
+        {/* =========================================================================
+            LEFT COLUMN: BRYNEX AI SIDEBAR (Search, Navigation, History, User Profile)
+        ========================================================================= */}
+        <aside className="bee-sidebar">
+          {/* Brand Header */}
+          <div className="bee-sidebar-brand" onClick={() => navigate('/workspace')}>
+            <div className="bee-brand-icon-wrap">
+              <img src={botLogo} alt="Brynex AI Logo" className="bee-brand-logo-img" />
+            </div>
+            <span className="bee-brand-name">Brynex AI</span>
           </div>
 
-          {/* Grouped Chronological Conversations List */}
-          <div className="ai-history-scroll">
+          {/* Search Input Box with Shortcut Badge */}
+          <div className="bee-sidebar-search-box">
+            <Search size={13} className="bee-search-icon" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              className="bee-search-input"
+            />
+            <span className="bee-search-shortcut">⌘K</span>
+          </div>
+
+          {/* Primary Navigation Links */}
+          <nav className="bee-sidebar-nav">
+            <button
+              type="button"
+              className={`bee-nav-link ${activeNavTab === 'Home' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveNavTab('Home');
+                handleNewChat();
+              }}
+            >
+              <Home size={15} />
+              <span>Home</span>
+            </button>
+            <button
+              type="button"
+              className={`bee-nav-link ${activeNavTab === 'Explore' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveNavTab('Explore');
+                navigate('/intelligence/hr');
+              }}
+            >
+              <Compass size={15} />
+              <span>Explore</span>
+            </button>
+            <button
+              type="button"
+              className={`bee-nav-link ${activeNavTab === 'Library' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveNavTab('Library');
+                navigate('/intelligence/hr/data');
+              }}
+            >
+              <BookOpen size={15} />
+              <span>Library</span>
+            </button>
+            <button
+              type="button"
+              className={`bee-nav-link ${activeNavTab === 'History' ? 'active' : ''}`}
+              onClick={() => setActiveNavTab('History')}
+            >
+              <Clock size={15} />
+              <span>History</span>
+            </button>
+          </nav>
+
+          {/* Grouped Chronological Conversations Section */}
+          <div className="bee-sidebar-history-section">
             {conversations.length === 0 ? (
-              <div className="ai-history-empty">
-                <MessageSquare size={20} color="#cbd5e1" style={{ margin: '0 auto 6px' }} />
-                <div>No previous consultations yet</div>
-                <div style={{ fontSize: '11px', marginTop: '2px' }}>
-                  Your discussions with your workforce advisor will be saved here.
+              <div className="bee-history-empty">
+                <div className="bee-history-category-title">Recent Chats</div>
+                <div className="bee-history-empty-sub">
+                  Start a new query to save sessions in history.
                 </div>
               </div>
             ) : (
               <>
                 {/* Today */}
                 {conversationGroups.today.length > 0 && (
-                  <div className="ai-history-group">
-                    <div className="ai-history-group-title">Today</div>
+                  <div className="bee-history-group">
+                    <div className="bee-history-category-title">Tomorrow / Today</div>
                     {conversationGroups.today.map((conv) => (
                       <div
                         key={conv._id || conv.id}
-                        className={`ai-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
+                        className={`bee-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
                         onClick={() => handleSelectConversation(conv._id || conv.id)}
                       >
-                        <div className="ai-history-item-left">
-                          <MessageSquare size={13} color={activeConversationId === (conv._id || conv.id) ? '#0ca678' : '#64748b'} />
-                          {editingConvId === (conv._id || conv.id) ? (
-                            <input
-                              type="text"
-                              value={editingTitleText}
-                              onChange={(e) => setEditingTitleText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveRename(conv._id || conv.id);
-                                if (e.key === 'Escape') setEditingConvId(null);
-                              }}
-                              autoFocus
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                width: '100%',
-                                fontSize: '12px',
-                                border: '1px solid #0ca678',
-                                borderRadius: '4px',
-                                padding: '2px 4px',
-                                outline: 'none'
-                              }}
-                            />
-                          ) : (
-                            <span className="ai-history-title-text" title={conv.title}>
-                              {conv.title}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="ai-history-actions">
-                          {editingConvId === (conv._id || conv.id) ? (
-                            <button
-                              type="button"
-                              className="ai-history-action-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSaveRename(conv._id || conv.id);
-                              }}
-                            >
-                              <Check size={12} color="#0ca678" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="ai-history-action-btn"
-                              title="Rename chat"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingConvId(conv._id || conv.id);
-                                setEditingTitleText(conv.title);
-                              }}
-                            >
-                              <Edit2 size={12} />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="ai-history-action-btn delete"
-                            title="Delete chat from MongoDB Atlas"
-                            onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        {editingConvId === (conv._id || conv.id) ? (
+                          <input
+                            type="text"
+                            value={editingTitleText}
+                            onChange={(e) => setEditingTitleText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveRename(conv._id || conv.id);
+                              if (e.key === 'Escape') setEditingConvId(null);
+                            }}
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                            className="bee-history-edit-input"
+                          />
+                        ) : (
+                          <span className="bee-history-item-title" title={conv.title}>
+                            {conv.title}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="bee-history-item-delete"
+                          title="Delete"
+                          onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
+                        >
+                          <Trash2 size={11} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -646,61 +704,51 @@ export default function AiAssistant() {
 
                 {/* Yesterday */}
                 {conversationGroups.yesterday.length > 0 && (
-                  <div className="ai-history-group">
-                    <div className="ai-history-group-title">Yesterday</div>
+                  <div className="bee-history-group">
+                    <div className="bee-history-category-title">Yesterday</div>
                     {conversationGroups.yesterday.map((conv) => (
                       <div
                         key={conv._id || conv.id}
-                        className={`ai-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
+                        className={`bee-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
                         onClick={() => handleSelectConversation(conv._id || conv.id)}
                       >
-                        <div className="ai-history-item-left">
-                          <MessageSquare size={13} color={activeConversationId === (conv._id || conv.id) ? '#0ca678' : '#64748b'} />
-                          <span className="ai-history-title-text" title={conv.title}>
-                            {conv.title}
-                          </span>
-                        </div>
-                        <div className="ai-history-actions">
-                          <button
-                            type="button"
-                            className="ai-history-action-btn delete"
-                            title="Delete chat"
-                            onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        <span className="bee-history-item-title" title={conv.title}>
+                          {conv.title}
+                        </span>
+                        <button
+                          type="button"
+                          className="bee-history-item-delete"
+                          title="Delete"
+                          onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
+                        >
+                          <Trash2 size={11} />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Previous 7 Days */}
+                {/* 7 Days Ago */}
                 {conversationGroups.previous7Days.length > 0 && (
-                  <div className="ai-history-group">
-                    <div className="ai-history-group-title">Previous 7 Days</div>
+                  <div className="bee-history-group">
+                    <div className="bee-history-category-title">7 Days Ago</div>
                     {conversationGroups.previous7Days.map((conv) => (
                       <div
                         key={conv._id || conv.id}
-                        className={`ai-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
+                        className={`bee-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
                         onClick={() => handleSelectConversation(conv._id || conv.id)}
                       >
-                        <div className="ai-history-item-left">
-                          <MessageSquare size={13} color={activeConversationId === (conv._id || conv.id) ? '#0ca678' : '#64748b'} />
-                          <span className="ai-history-title-text" title={conv.title}>
-                            {conv.title}
-                          </span>
-                        </div>
-                        <div className="ai-history-actions">
-                          <button
-                            type="button"
-                            className="ai-history-action-btn delete"
-                            title="Delete chat"
-                            onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        <span className="bee-history-item-title" title={conv.title}>
+                          {conv.title}
+                        </span>
+                        <button
+                          type="button"
+                          className="bee-history-item-delete"
+                          title="Delete"
+                          onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
+                        >
+                          <Trash2 size={11} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -708,30 +756,25 @@ export default function AiAssistant() {
 
                 {/* Older */}
                 {conversationGroups.older.length > 0 && (
-                  <div className="ai-history-group">
-                    <div className="ai-history-group-title">Older</div>
+                  <div className="bee-history-group">
+                    <div className="bee-history-category-title">Older</div>
                     {conversationGroups.older.map((conv) => (
                       <div
                         key={conv._id || conv.id}
-                        className={`ai-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
+                        className={`bee-history-item ${activeConversationId === (conv._id || conv.id) ? 'active' : ''}`}
                         onClick={() => handleSelectConversation(conv._id || conv.id)}
                       >
-                        <div className="ai-history-item-left">
-                          <MessageSquare size={13} color={activeConversationId === (conv._id || conv.id) ? '#0ca678' : '#64748b'} />
-                          <span className="ai-history-title-text" title={conv.title}>
-                            {conv.title}
-                          </span>
-                        </div>
-                        <div className="ai-history-actions">
-                          <button
-                            type="button"
-                            className="ai-history-action-btn delete"
-                            title="Delete chat"
-                            onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        <span className="bee-history-item-title" title={conv.title}>
+                          {conv.title}
+                        </span>
+                        <button
+                          type="button"
+                          className="bee-history-item-delete"
+                          title="Delete"
+                          onClick={(e) => handleDeleteConversation(e, conv._id || conv.id)}
+                        >
+                          <Trash2 size={11} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -740,441 +783,292 @@ export default function AiAssistant() {
             )}
           </div>
 
-          {/* Footer: MongoDB Atlas Status */}
-          <div className="ai-history-footer">
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Database size={12} />
-              <span>MongoDB Atlas</span>
-            </span>
-            <span style={{ color: '#64748b' }}>{conversations.length} saved</span>
+          {/* User Profile Pill at Bottom of Left Sidebar */}
+          <div className="bee-sidebar-user-card" onClick={() => navigate('/settings')}>
+            <div className="bee-user-avatar">
+              <User size={15} color="#00a876" />
+            </div>
+            <div className="bee-user-details">
+              <span className="bee-user-name">Executive Leader</span>
+              <span className="bee-user-email">brynex.executive@company.com</span>
+            </div>
+            <div className="bee-user-more">
+              <ChevronDown size={13} color="#94a3b8" />
+            </div>
           </div>
         </aside>
-      )}
 
-      {/* =========================================================================
-          MIDDLE COLUMN: CHAT INTERACTION & CONVERSATION STREAM
-      ========================================================================= */}
-      <div className="ai-chat-main-column">
-        {/* Floating Toggles (only rendered if either sidebar is collapsed) */}
-        {(!isHistoryOpen || !isContextOpen) && (
-          <div className="ai-floating-sidebar-toggles">
-            {!isHistoryOpen && (
+        {/* =========================================================================
+            RIGHT MAIN CANVAS: MODEL PILL, TOP ACTIONS, GREETING, CHAT DOCK
+        ========================================================================= */}
+        <main className="bee-main-canvas">
+          {/* Canvas Header Bar */}
+          <div className="bee-canvas-header">
+            {/* Top Left: Model Selector Pill */}
+            <div className="bee-model-pill-wrapper">
               <button
                 type="button"
-                className="ai-sidebar-toggle-btn"
-                onClick={() => setIsHistoryOpen(true)}
-                title="Expand Discussions"
+                className="bee-model-selector-pill"
+                onClick={() => setActiveModelMenuOpen(!activeModelMenuOpen)}
               >
-                <PanelLeft size={15} />
-                <span>Discussions</span>
+                <div className="bee-model-dot-icon">
+                  <Cpu size={12} color="#00a876" />
+                </div>
+                <span className="bee-model-name">
+                  {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name?.split(' ')[0] || 'Claude 4.5'}
+                </span>
+                <ChevronDown size={12} color="#00a876" />
               </button>
-            )}
-            {!isContextOpen && (
-              <button
-                type="button"
-                className="ai-sidebar-toggle-btn"
-                onClick={() => setIsContextOpen(true)}
-                title="Expand Advisory Context"
-              >
-                <Building size={14} />
-                <span>Context</span>
+
+              {activeModelMenuOpen && (
+                <div className="bee-model-dropdown-menu">
+                  {AVAILABLE_MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`bee-model-dropdown-item ${selectedModel === m.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedModel(m.id);
+                        setStoredModel(m.id);
+                        setActiveModelMenuOpen(false);
+                      }}
+                    >
+                      <span>{m.name}</span>
+                      {selectedModel === m.id && <Check size={13} color="#00a876" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Top Right: + New Chat Pill and User Profile Icon */}
+            <div className="bee-canvas-header-right">
+              <button type="button" className="bee-new-chat-pill" onClick={handleNewChat}>
+                <Plus size={13} />
+                <span>New Chat</span>
               </button>
-            )}
+              <div className="bee-top-avatar" onClick={() => navigate('/settings')}>
+                <User size={14} color="#0f172a" />
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* Center Hero / Greeting & Suggestions */}
-        <div className="ai-chat-body">
-          {messages.length <= 1 && (
-            <div className="advisory-welcome-hero">
-              <div className="advisory-hero-avatar-wrap">
-                <img src={botLogo} alt="Claude Workforce Copilot" className="advisory-hero-avatar-img bot-animated" />
-                <span className="advisory-hero-online-badge" title="Advisor Online & Grounded in Data"></span>
+          {/* Canvas Center Interaction Content */}
+          <div className="bee-canvas-content-scroll">
+            {/* When conversation is empty or just starting: Center Spherical Hero */}
+            {messages.length <= 1 && (
+              <div className="bee-hero-welcome-section">
+                {/* Brynex 3D AI Bot Mascot */}
+                <div className="bee-mascot-hero-wrap">
+                  <img src={botLogo} alt="Brynex AI Assistant" className="bee-mascot-hero-img" />
+                </div>
+
+                {/* Greeting Title matching screenshot typography */}
+                <h1 className="bee-hero-greeting-title">
+                  {getTimeOfDayGreeting()}, Executive
+                </h1>
+                <h2 className="bee-hero-sub-title">
+                  How Can I <span className="bee-highlight-assist">Assist You</span> Today?
+                </h2>
               </div>
-              <div className="advisory-hero-titles">
-                <span className="advisory-kicker">EXECUTIVE WORKFORCE ADVISOR</span>
-                <h3>{getTimeOfDayGreeting()}, Executive Leader</h3>
-                <p>
-                  {uploadedFiles.length > 0
-                    ? `I have synthesized ${uploadedFiles.length} active workforce dataset(s) with live retail LMS telemetry across 25 retail branches (204 staff profiles). What strategic trend shall we examine?`
-                    : "I'm actively monitoring 25 retail stores with live telemetry (204 staff records, camera footfall audits, and multi-store quotas). Ask about any store or employee."}
-                </p>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* 4 Prompt Cards Grid */}
-          {messages.length <= 1 && (
-            <div className="ai-prompt-cards-grid">
-              {promptCards.map((card) => (
-                <button
-                  key={card.id}
-                  className="ai-prompt-card"
-                  onClick={() => {
-                    if (card.isUpload) {
-                      navigate('/intelligence/hr/data');
-                    } else {
-                      handleSend(card.text);
-                    }
-                  }}
-                >
-                  <div className="ai-prompt-card-top">
-                    <span className="ai-prompt-card-category">{card.category || 'ADVISORY'}</span>
-                    <div className="ai-prompt-card-icon">{card.icon}</div>
-                  </div>
-                  <div className="ai-prompt-card-text">{card.text}</div>
-                  <div className="ai-prompt-card-arrow">
-                    <ArrowRight size={13} />
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Active Conversation Stream */}
-          <div className="advisory-conversation-stream" ref={chatStreamRef}>
-            {messages.map((msg) => (
-              <div key={msg.id} className={`advisory-message-turn ${msg.sender}`}>
-                {msg.sender === 'assistant' ? (
-                  <div className="advisory-turn-inner advisor-turn">
-                    <div className="advisory-avatar-col">
-                      <img src={botLogo} alt="Claude Workforce Copilot" className="advisory-message-avatar bot-animated" />
-                    </div>
-                    <div className="advisory-content-col">
-                      <div className="advisory-author-bar">
-                        <span className="advisory-author-name">Workforce Advisor</span>
-                        <span className="advisory-role-badge">HR Partner</span>
-                        <span className="advisory-message-time">
-                          {msg.createdAt
-                            ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <div className={`advisory-bubble-advisor ${msg.isError ? 'advisory-bubble-error' : ''}`}>
-                        <FormattedAiContent
-                          content={msg.text}
-                          bullets={msg.bullets}
-                          title={msg.title}
-                        />
+            {/* Active Conversation Messages Stream */}
+            {messages.length > 1 && (
+              <div className="bee-conversation-stream" ref={chatStreamRef}>
+                {messages.map((msg) => (
+                  <div key={msg.id} className={`bee-chat-row ${msg.sender}`}>
+                    {msg.sender === 'assistant' ? (
+                      <div className="bee-chat-bubble assistant">
+                        <div className="bee-bubble-header">
+                          <div className="bee-bubble-avatar">
+                            <Sparkles size={13} color="#00a876" />
+                          </div>
+                          <span className="bee-bubble-sender">Brynex Intelligence</span>
+                          <span className="bee-bubble-time">
+                            {msg.createdAt
+                              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="bee-bubble-body">
+                          <FormattedAiContent
+                            content={msg.text}
+                            bullets={msg.bullets}
+                            title={msg.title}
+                          />
+                        </div>
                         {uploadedFiles.length > 0 && !msg.isError && (
-                          <div className="advisory-evidence-note">
-                            <CheckCircle2 size={12} color="#0ca678" />
-                            <span>Grounded in active workforce telemetry & verified employee records</span>
+                          <div className="bee-bubble-grounding-tag">
+                            <CheckCircle2 size={12} color="#00a876" />
+                            <span>Grounded in live retail LMS telemetry & 25 branches</span>
                           </div>
                         )}
                       </div>
-                    </div>
+                    ) : (
+                      <div className="bee-chat-bubble user">
+                        <div className="bee-bubble-header user">
+                          <span className="bee-bubble-sender">You</span>
+                          <span className="bee-bubble-time">
+                            {msg.createdAt
+                              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="bee-bubble-body user">{msg.text}</div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="advisory-turn-inner user-turn">
-                    <div className="advisory-content-col user-col">
-                      <div className="advisory-author-bar user-bar">
-                        <span className="advisory-message-time">
-                          {msg.createdAt
-                            ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="advisory-author-name">You</span>
+                ))}
+
+                {/* Loading indicator */}
+                {isLoading && (
+                  <div className="bee-chat-row assistant">
+                    <div className="bee-chat-bubble assistant loading">
+                      <div className="bee-bubble-header">
+                        <div className="bee-bubble-avatar">
+                          <Sparkles size={13} color="#00a876" />
+                        </div>
+                        <span className="bee-bubble-sender">Brynex Synthesizing...</span>
                       </div>
-                      <div className="advisory-bubble-user">
-                        {msg.text}
-                      </div>
-                    </div>
-                    <div className="advisory-avatar-col user-avatar-col">
-                      <div className="advisory-user-avatar-circle">
-                        <User size={15} color="#ffffff" />
+                      <div className="bee-typing-dots">
+                        <span className="bee-dot"></span>
+                        <span className="bee-dot"></span>
+                        <span className="bee-dot"></span>
                       </div>
                     </div>
                   </div>
                 )}
-              </div>
-            ))}
-
-            {/* Live Thinking / Reviewing Indicator */}
-            {isLoading && (
-              <div className="advisory-message-turn assistant">
-                <div className="advisory-turn-inner advisor-turn">
-                  <div className="advisory-avatar-col">
-                    <img src={botLogo} alt="Claude Workforce Copilot" className="advisory-message-avatar typing-pulse bot-animated" />
-                  </div>
-                  <div className="advisory-content-col">
-                    <div className="advisory-author-bar">
-                      <span className="advisory-author-name">Workforce Advisor</span>
-                      <span className="advisory-typing-sub">Composing recommendations...</span>
-                    </div>
-                    <div className="advisory-typing-card">
-                      <div className="ai-typing-dots">
-                        <span className="ai-typing-dot"></span>
-                        <span className="ai-typing-dot"></span>
-                        <span className="ai-typing-dot"></span>
-                      </div>
-                      <span className="advisory-typing-label">
-                        {uploadedFiles.length > 0
-                          ? 'Reviewing workforce records & evaluating strategic remedies...'
-                          : 'Preparing strategic guidance & recommendations...'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <div ref={chatBottomRef} />
               </div>
             )}
-            <div ref={chatBottomRef} />
+
+            {/* Quick Suggestions (Shown on hero start) */}
+            {messages.length <= 1 && (
+              <div className="bee-hero-suggestions">
+                {promptCards.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className="bee-suggestion-chip"
+                    onClick={() => {
+                      if (card.isUpload) {
+                        navigate('/intelligence/hr/data');
+                      } else {
+                        handleSend(card.text);
+                      }
+                    }}
+                  >
+                    <span className="bee-sugg-icon">{card.icon}</span>
+                    <span className="bee-sugg-text">{card.text}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Bottom Input Dock */}
-        <form
-          className="ai-input-dock"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-        >
-          <button
-            type="button"
-            className="ai-input-icon-btn"
-            title="Manage or attach workforce datasets"
-            onClick={() => navigate('/intelligence/hr/data')}
-          >
-            <Link2 size={18} />
-          </button>
-
-          {/* AI Model Selector inside the Chat Box */}
-          <div className="chat-model-selector-pill" title="Change Active AI Intelligence Model">
-            <Cpu size={13} className="chat-model-icon" />
-            <select
-              className="chat-model-select-inline"
-              value={selectedModel}
-              onChange={handleModelChange}
-              title="Select AI Model"
+          {/* =========================================================================
+              BOTTOM WIDE INPUT CARD (Matching Screenshot with Inner Action Chips)
+          ========================================================================= */}
+          <div className="bee-input-card-dock">
+            <form
+              className="bee-input-card-container"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
             >
-              {AVAILABLE_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              {/* Primary Input Textarea / Row */}
+              <div className="bee-input-row">
+                <Sparkles size={14} className="bee-input-sparkle-icon" color="#94a3b8" />
+                <input
+                  type="text"
+                  className="bee-main-input-field"
+                  placeholder="Initiate a query or send a command to the AI..."
+                  value={inputText}
+                  disabled={isLoading}
+                  onChange={(e) => setInputText(e.target.value)}
+                />
+              </div>
 
-          <div className="ai-input-divider"></div>
-          <input
-            type="text"
-            className="ai-input-field"
-            placeholder={
-              isLoading
-                ? 'Advisor is reviewing...'
-                : uploadedFiles.length > 0
-                ? `Consult your advisor regarding ${uploadedFiles[0].name} or workforce strategy...`
-                : 'Ask about any of our 25 stores (Edapally, Perinthalmanna, Calicut, etc.) or employee profiles...'
-            }
-            value={inputText}
-            disabled={isLoading}
-            onChange={(e) => setInputText(e.target.value)}
-          />
-          <button
-            type="button"
-            className="ai-input-icon-btn"
-            title="Voice Input"
-            onClick={() => {
-              if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                const recognition = new SpeechRecognition();
-                recognition.onresult = (e) => {
-                  const transcript = e.results[0][0].transcript;
-                  setInputText(transcript);
-                };
-                recognition.start();
-              } else {
-                alert('Speech recognition is not supported in this browser.');
-              }
-            }}
-          >
-            <Mic size={18} />
-          </button>
-          <button
-            type="submit"
-            className="ai-send-btn"
-            title="Send Message"
-            disabled={isLoading || !inputText.trim()}
-            style={{ opacity: isLoading || !inputText.trim() ? 0.6 : 1 }}
-          >
-            <Send size={15} />
-          </button>
-        </form>
-      </div>
+              {/* Bottom Card Action Bar (Chips + Send Button) */}
+              <div className="bee-input-card-footer">
+                <div className="bee-input-tools-left">
+                  {/* Paperclip / Attach Data */}
+                  <button
+                    type="button"
+                    className="bee-tool-icon-btn"
+                    title="Attach or manage datasets"
+                    onClick={() => navigate('/intelligence/hr/data')}
+                  >
+                    <Paperclip size={14} />
+                  </button>
 
-      {/* =========================================================================
-          RIGHT SIDEBAR: ADVISORY CONTEXT & EVIDENCE
-      ========================================================================= */}
-      {isContextOpen && (
-        <aside className="ai-sidebar-panel">
-        {/* Section 1: Advisory Context & Live Data */}
-        <div className="ai-sidebar-section">
-          <div className="ai-section-title-sparkle">
-            <Building size={14} className="ai-sparkle-icon" />
-            <span>Advisory Context & Evidence</span>
-          </div>
-          <div className="ai-sources-list">
-            {/* Core Advisory Intelligence */}
-            <div className="ai-source-item">
-              <div className="ai-source-left">
-                <div className="ai-source-icon-wrap ai-source-icon-blue">
-                  <UserCheck size={15} />
+                  {/* Mode Chips from Screenshot */}
+                  <button
+                    type="button"
+                    className={`bee-mode-chip ${activeChip === 'Reasoning' ? 'active' : ''}`}
+                    onClick={() => setActiveChip('Reasoning')}
+                  >
+                    <Lightbulb size={13} />
+                    <span>Reasoning</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`bee-mode-chip ${activeChip === 'Create Image' ? 'active' : ''}`}
+                    onClick={() => setActiveChip('Create Image')}
+                  >
+                    <Wand2 size={13} />
+                    <span>Create Image</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`bee-mode-chip ${activeChip === 'Deep Research' ? 'active' : ''}`}
+                    onClick={() => setActiveChip('Deep Research')}
+                  >
+                    <Globe size={13} />
+                    <span>Deep Research</span>
+                  </button>
+
+                  {/* Voice input mic */}
+                  <button
+                    type="button"
+                    className="bee-tool-icon-btn"
+                    title="Voice dictation"
+                    onClick={() => {
+                      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        const recognition = new SpeechRecognition();
+                        recognition.onresult = (e) => {
+                          const transcript = e.results[0][0].transcript;
+                          setInputText(transcript);
+                        };
+                        recognition.start();
+                      } else {
+                        alert('Speech recognition is not supported in this browser.');
+                      }
+                    }}
+                  >
+                    <Mic size={14} />
+                  </button>
                 </div>
-                <div className="ai-source-info">
-                  <h4>Workforce Advisory Desk</h4>
-                  <p>Executive People & Talent Guidance</p>
-                </div>
-              </div>
-              <div className="ai-source-status">
-                <span className="ai-status-dot-green"></span>
-                <span>Active</span>
-              </div>
-            </div>
 
-            {/* Live Retail LMS API Integration */}
-            <div className="ai-source-item">
-              <div className="ai-source-left">
-                <div className="ai-source-icon-wrap ai-source-icon-green">
-                  <Database size={15} />
-                </div>
-                <div className="ai-source-info">
-                  <h4>Brynex Retail LMS</h4>
-                  <p>25 Stores Monitored • Live Operations</p>
-                </div>
-              </div>
-              <div className="ai-source-status">
-                <span className="ai-status-dot-green"></span>
-                <span>Live API</span>
-              </div>
-            </div>
-
-            {/* Live Telemetry KPI Matrix */}
-            <div className="ai-telemetry-badge-grid">
-              <div className="ai-telemetry-pill">
-                <span className="ai-telemetry-pill-val">25</span>
-                <span className="ai-telemetry-pill-lbl">Stores</span>
-              </div>
-              <div className="ai-telemetry-pill">
-                <span className="ai-telemetry-pill-val">204</span>
-                <span className="ai-telemetry-pill-lbl">Staff</span>
-              </div>
-              <div className="ai-telemetry-pill">
-                <span className="ai-telemetry-pill-val">2,270+</span>
-                <span className="ai-telemetry-pill-lbl">Footfall</span>
-              </div>
-              <div className="ai-telemetry-pill">
-                <span className="ai-telemetry-pill-val">Active</span>
-                <span className="ai-telemetry-pill-lbl">Status</span>
-              </div>
-            </div>
-
-            {/* Dynamically Ingested Real CSV Files */}
-            {uploadedFiles.length > 0 ? (
-              uploadedFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className="ai-source-item"
-                  onClick={() => navigate('/intelligence/hr/data')}
-                  style={{ cursor: 'pointer' }}
-                  title="Click to view file in Data Management"
+                {/* Right: Pill Send Button from screenshot */}
+                <button
+                  type="submit"
+                  className="bee-send-action-btn"
+                  disabled={isLoading || !inputText.trim()}
+                  title="Send query"
                 >
-                  <div className="ai-source-left">
-                    <div className="ai-source-icon-wrap ai-source-icon-green">
-                      <FileSpreadsheet size={15} />
-                    </div>
-                    <div className="ai-source-info">
-                      <h4 style={{ wordBreak: 'break-word' }}>{file.name}</h4>
-                      <p>
-                        {file.rows ? `${file.rows.toLocaleString()} staff rows • ` : ''}
-                        {file.holds || 'Workforce Data'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="ai-source-status">
-                    <span className="ai-status-dot-green"></span>
-                    <span>Linked</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div
-                className="ai-source-item optional-enrichment"
-                onClick={() => navigate('/intelligence/hr/data')}
-                style={{ cursor: 'pointer', background: '#f8fafc', border: '1px dashed #cbd5e1' }}
-                title="Connect optional CSV files for supplementary workforce analysis"
-              >
-                <div className="ai-source-left">
-                  <div className="ai-source-icon-wrap" style={{ background: '#f1f5f9', color: '#64748b' }}>
-                    <FileSpreadsheet size={15} />
-                  </div>
-                  <div className="ai-source-info">
-                    <h4 style={{ color: '#475569', fontSize: '12px' }}>Staff Master / CSV</h4>
-                    <p style={{ fontSize: '10.5px' }}>Optional dataset enrichment</p>
-                  </div>
-                </div>
-                <div className="ai-source-status" style={{ color: '#0ca678', fontWeight: 600, fontSize: '11px' }}>
-                  + Enrich
-                </div>
+                  <Send size={14} />
+                </button>
               </div>
-            )}
+            </form>
           </div>
-
-          {uploadedFiles.length > 0 && (
-            <button
-              type="button"
-              className="ai-upload-shortcut-btn"
-              onClick={() => navigate('/intelligence/hr/data')}
-            >
-              <Plus size={13} />
-              <span>Connect Another Dataset</span>
-            </button>
-          )}
-        </div>
-
-        {/* Section 2: Recommended Advisory Focus Areas */}
-        <div className="ai-sidebar-section">
-          <div className="ai-section-title-sparkle">
-            <Briefcase size={14} className="ai-sparkle-icon" />
-            <span>Advisory Focus Areas</span>
-          </div>
-          <div className="ai-followups-list">
-            {suggestedFollowUps.map((item, idx) => (
-              <button
-                key={idx}
-                className="ai-followup-pill"
-                onClick={() => handleSend(item)}
-                disabled={isLoading}
-              >
-                <span>{item}</span>
-                <ChevronRight size={14} color="#94a3b8" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Section 3: Grounded Advisory Status */}
-        <div className="ai-sidebar-section" style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <ShieldCheck size={16} color="#0ca678" />
-            <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>
-              Live Retail AI Intelligence
-            </span>
-          </div>
-          <p style={{ fontSize: '11px', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
-            {uploadedFiles.length > 0
-              ? `Guidance is cross-referenced with live LMS telemetry across 2 branches and ${uploadedFiles.length} connected dataset(s).`
-              : 'Actively cross-referencing camera footfall telemetry, POS transactions, LMS certifications, and staff performance for Perinthalmanna & Edappally.'}
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div className="ai-sidebar-footer">
-          <span className="ai-last-updated-label">Consultation desk</span>
-          <span className="ai-last-updated-time">Live • Senior Workforce Advisory Desk</span>
-        </div>
-        </aside>
-      )}
+        </main>
+      </div>
     </div>
   );
 }

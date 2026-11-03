@@ -4,24 +4,47 @@
  * purely from actual parsed rows without any hardcoded mock data.
  */
 
+import { parsePromptIntent, recordMatchesPrompt } from './promptMatcherService.js';
+
 // Helper to categorize what a file primarily holds
 export const identifyFileScope = (fileName = '', rows = []) => {
   const lowerName = fileName.toLowerCase();
   const sample = rows[0] || {};
-  const keys = Object.keys(sample).map((k) => k.toLowerCase());
+  const keys = Object.keys(sample).map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
 
-  const hasSalary = keys.some((k) => k.includes('salary') || k.includes('pay') || k.includes('compensation') || k.includes('overtime') || k.includes('bonus') || k.includes('wage'));
-  const hasAttendance = keys.some((k) => k.includes('attend') || k.includes('present') || k.includes('absent') || k.includes('shift') || k.includes('hours') || k.includes('leave'));
-  const hasEmployee = keys.some((k) => k.includes('name') || k.includes('employee') || k.includes('dept') || k.includes('role') || k.includes('hire') || k.includes('title'));
+  const hasEmployeeMaster = keys.some((k) =>
+    k.includes('empid') || k.includes('employeeno') || k.includes('employeeid') ||
+    k.includes('empname') || k.includes('employeename') || k.includes('employeedetails') ||
+    k.includes('doj') || k.includes('dob') || k.includes('birthday') ||
+    k.includes('bloodgroup') || k.includes('employmentstatus') || k.includes('maritalstatus') ||
+    k.includes('confirmationdate') || k.includes('designation')
+  );
 
-  if (lowerName.includes('payroll') || lowerName.includes('salary') || (hasSalary && !hasAttendance)) {
-    return 'Payroll & Compensation';
+  const hasSales = keys.some((k) =>
+    k.includes('revenue') || k.includes('grosssales') || k.includes('netsales') ||
+    k.includes('dailyrevenue') || k.includes('transactions') || k.includes('footfall')
+  );
+
+  const hasSalary = keys.some((k) =>
+    k.includes('basesalary') || k.includes('grosssalary') || k.includes('payroll') ||
+    k.includes('ctc') || k.includes('takehome') || k.includes('deductions')
+  );
+
+  const hasAttendance = keys.some((k) =>
+    k.includes('presentdays') || k.includes('absentdays') || k.includes('shiftdate') ||
+    k.includes('scheduledhours') || k.includes('productivehours') || k.includes('overtimehours') ||
+    k.includes('restinterval') || k.includes('punchin') || k.includes('punchout') ||
+    k.includes('timesheet') || k.includes('present') || k.includes('absent')
+  );
+
+  if (lowerName.includes('revenue') || lowerName.includes('sales') || lowerName.includes('finance') || hasSales) {
+    return 'Branch Revenue & Telemetry';
   }
-  if (lowerName.includes('attendance') || lowerName.includes('shift') || lowerName.includes('roster') || lowerName.includes('timesheet') || hasAttendance) {
+  if (lowerName.includes('attendance') || lowerName.includes('muster') || lowerName.includes('roster') || lowerName.includes('timesheet') || (hasAttendance && !hasEmployeeMaster)) {
     return 'Attendance & Shifts';
   }
-  if (lowerName.includes('revenue') || lowerName.includes('sales') || lowerName.includes('finance')) {
-    return 'Branch Revenue & Telemetry';
+  if (lowerName.includes('payroll') || (hasSalary && !hasEmployeeMaster)) {
+    return 'Payroll & Compensation';
   }
   return 'Employee Master & Workforce';
 };
@@ -59,11 +82,16 @@ export const analyzeMultiFileHrData = async ({ files = [], customRules = null, a
   let exitedEmployees = [];
   let highAbsenceEmployees = [];
 
+  const intent = parsePromptIntent(adminPrompt);
+
   // Process every uploaded file and stitch data onto master entities
   files.forEach((file) => {
     const rows = file.parsedRows || [];
 
     rows.forEach((row, idx) => {
+      if (intent.isFiltered && !recordMatchesPrompt(row, intent)) {
+        return;
+      }
       const rowKeys = Object.keys(row);
       const idKey = rowKeys.find((k) => /id|emp_id|employee_id|code|badge/i.test(k));
       const nameKey = rowKeys.find((k) => /name|full_name|employee/i.test(k));
@@ -443,9 +471,9 @@ export const analyzeMultiFileHrData = async ({ files = [], customRules = null, a
     },
     {
       id: 'monitored',
-      title: monitoredTitle,
+      title: intent.isFiltered ? 'Staff Monitored' : monitoredTitle,
       value: String(monitoredCount),
-      trend: `${monitoredCount} records ingested`,
+      trend: intent.isFiltered ? `${monitoredCount} records matching "${adminPrompt}"` : `${monitoredCount} records ingested`,
       trendPositive: true,
       colorClass: 'hr-kpi-icon-green'
     },
@@ -482,9 +510,11 @@ export const analyzeMultiFileHrData = async ({ files = [], customRules = null, a
     kpiMetrics,
     attentionItems: [], // Pure real AI data only — zero mock/fallback items
     rawTelemetryFlags,
-    attentionSummary: totalHeadcount > 0
-      ? `Ingested ${totalHeadcount} employee records across ${files.length} connected dataset(s): ${exitedEmployees.length} exits, ${Math.round(totalOvertimeHours)} overtime hours, ${restIntervalViolations} rest interval violations detected. Ready for AI synthesis.`
-      : `Ingested ${files.length} connected dataset(s).`,
+    attentionSummary: intent.isFiltered
+      ? `Filtered dataset intelligence active: Focused on "${adminPrompt}" (${totalHeadcount} employee records). Ready for AI synthesis.`
+      : (totalHeadcount > 0
+          ? `Ingested ${totalHeadcount} employee records across ${files.length} connected dataset(s): ${exitedEmployees.length} exits, ${Math.round(totalOvertimeHours)} overtime hours, ${restIntervalViolations} rest interval violations detected. Ready for AI synthesis.`
+          : `Ingested ${files.length} connected dataset(s).`),
     departmentBreakdown: departmentStats
   };
 };

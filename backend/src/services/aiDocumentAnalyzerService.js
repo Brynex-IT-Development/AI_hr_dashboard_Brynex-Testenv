@@ -7,20 +7,28 @@
  */
 
 import { extractStoreMonthlyTarget, extractStoreNetSales, extractStoreFootfallAndWalkins } from './hrIntelligenceAggregator.js';
+import { parsePromptIntent, matchesBranch, recordMatchesPrompt, itemMatchesPrompt } from './promptMatcherService.js';
 
 // Helper to extract a statistical profile and representative rows from tabular data
-export const extractDatasetTelemetry = (files = []) => {
+export const extractDatasetTelemetry = (files = [], adminPrompt = '') => {
   if (!files || files.length === 0) return null;
+  const intent = parsePromptIntent(adminPrompt);
 
   return files.map((file) => {
-    const rows = file.parsedRows || [];
+    let rows = file.parsedRows || [];
+    if (intent.isFiltered) {
+      rows = rows.filter((r) => recordMatchesPrompt(r, intent));
+    }
     const totalRows = rows.length;
     if (totalRows === 0) {
       return {
         fileName: file.name,
+        fileScope: file.holds || 'Dataset',
         totalRows: 0,
-        columns: [],
-        summary: 'Empty dataset'
+        columns: Object.keys(file.parsedRows?.[0] || {}),
+        summary: intent.isFiltered
+          ? `0 rows matching prompt "${adminPrompt}" in this dataset. (File has no records for this target branch/scope).`
+          : 'Empty dataset'
       };
     }
 
@@ -119,45 +127,69 @@ export const runClaudeDocumentAnalysis = async ({ files, adminPrompt = '', custo
     throw new Error('ANTHROPIC_API_KEY is not configured in backend environment.');
   }
 
-  const telemetry = extractDatasetTelemetry(files);
+  const intent = parsePromptIntent(adminPrompt);
+  const telemetry = extractDatasetTelemetry(files, adminPrompt);
   if (!telemetry || telemetry.length === 0) {
     return null;
   }
 
-  // Also extract prompt-matching rows across files if a prompt is given
+  // Extract prompt-matching rows across files if intent is filtered
   let matchingRecordsSample = [];
-  if (adminPrompt && adminPrompt.trim()) {
-    const pClean = adminPrompt.toLowerCase()
-      .replace(/only show|show|focus on|filter by|data|employees?|staff|please|all/gi, '')
-      .trim();
-    if (pClean.length > 2) {
-      files.forEach(f => {
-        (f.parsedRows || []).forEach(r => {
-          const str = JSON.stringify(r).toLowerCase();
-          if (str.includes(pClean) && matchingRecordsSample.length < 25) {
-            matchingRecordsSample.push(r);
-          }
-        });
+  if (intent.isFiltered) {
+    files.forEach((f) => {
+      (f.parsedRows || []).forEach((r) => {
+        if (recordMatchesPrompt(r, intent) && matchingRecordsSample.length < 35) {
+          matchingRecordsSample.push(r);
+        }
       });
-    }
+    });
   }
 
-  const totalHeadcountOrRows = files.reduce((sum, f) => sum + (f.parsedRows?.length || 0), 0);
-  const filesListStr = files.map((f, i) => `Dataset ${i + 1}: "${f.name}" (${f.holds || 'Connected Dataset'}) - ${f.parsedRows?.length || 0} rows`).join('\n');
-  // Target: At least 3 distinct issues per connected dataset (+ 1 cross-dataset correlation if > 1 dataset)
-  const targetPerFile = 3;
-  const expectedTotalIssues = (files.length * targetPerFile) + (files.length > 1 ? 1 : 0);
+  const matchingFiles = intent.isFiltered
+    ? files.filter((f) => (f.parsedRows || []).some((r) => recordMatchesPrompt(r, intent)))
+    : files;
+  const activeFiles = matchingFiles.length > 0 ? matchingFiles : files;
 
-  const fileItemDirectives = files.map((f, i) => `
+  const totalHeadcountOrRows = intent.isFiltered
+    ? matchingRecordsSample.length
+    : files.reduce((sum, f) => sum + (f.parsedRows?.length || 0), 0);
+
+  const filesListStr = activeFiles
+    .map((f, i) => `Dataset ${i + 1}: "${f.name}" (${f.holds || 'Connected Dataset'}) - ${f.parsedRows?.length || 0} total rows (${intent.isFiltered ? (f.parsedRows || []).filter((r) => recordMatchesPrompt(r, intent)).length : f.parsedRows?.length || 0} matching target)`)
+    .join('\n');
+
+  const expectedTotalIssues = intent.isFiltered
+    ? Math.max(2, Math.min(4, activeFiles.length * 2))
+    : (files.length * 3) + (files.length > 1 ? 1 : 0);
+
+  const fileItemDirectives = activeFiles.map((f, i) => `
   * FOR DATASET ${i + 1} ("${f.name}"):
-    Generate AT LEAST 3 distinct, high-impact Management Attention items directly from its rows/columns:
-    - Issue A for "${f.name}": Primary risk / compliance / alert (e.g. exit notices, rest turnaround violations, zero-revenue branches).
-    - Issue B for "${f.name}": Operational / cost / capacity variance (e.g. overtime concentration, salary cost disparities, lead conversion / footfall sensor gaps).
-    - Issue C for "${f.name}": Strategic / efficiency / staffing opportunity (e.g. productivity gaps, department headcount imbalances, branch transaction velocity disparities).
-    Each of these 3 items MUST set "sourceFile": "${f.name}".
+    Generate high-impact Management Attention items directly from its rows/columns:
+    - Issue A for "${f.name}": Primary risk / compliance / alert (e.g. exit notices, rest turnaround violations, quota variances).
+    - Issue B for "${f.name}": Operational / cost / capacity variance (e.g. overtime concentration, salary cost disparities, staffing bottlenecks).
+    Each item MUST set "sourceFile": "${f.name}".
   `).join('\n');
 
-  const multiDatasetDirective = `
+  const coverageDirective = intent.isFiltered
+    ? `
+CRITICAL PROMPT FOCUS & STRICT ISOLATION DIRECTIVE:
+The executive user has entered prompt: "${adminPrompt}".
+Target Scope: ${intent.brand ? `Brand ${intent.brand} ` : ''}${intent.location ? `Branch: ${intent.location}` : ''} (${intent.cleaned}).
+
+STRICT BRAND & BRANCH EXCLUSION RULES (NON-NEGOTIABLE):
+1. You MUST tailor your ENTIRE analysis, attention items, root causes, evidence, and decision options strictly to align with this prompt: "${adminPrompt}".
+2. ZERO CROSS-BRANCH / ZERO CROSS-BRAND LEAKAGE:
+${intent.brand === 'G' ? '- The user explicitly asked for Brand G (Suitor Guy Edappally / G-Edappally). You MUST NEVER include, cite, or mention Z-Edappally, Zorucci, Zeness, Zubar, or any Z format stores or staff. Citing Z format data or other branches is strictly prohibited.' : ''}
+${intent.brand === 'Z' ? '- The user explicitly asked for Brand Z (Zorucci Edappally / Z-Edappally). You MUST NEVER include, cite, or mention G-Edappally, Suitor Guy, SG, or any G format stores or staff. Citing G format data or other branches is strictly prohibited.' : ''}
+- DO NOT generate issues for files that contain 0 matching rows for this branch.
+3. Generate 2 to 3 distinct, realistic, high-impact Management Attention items directly from the provided real matching telemetry:
+- Target attainment & sales deficits for this store
+- Staffing, designations, probation concentrations, and onboarding
+- Attendance rosters, shift schedules, and geo-fencing compliance
+4. Every cited employee name, employee ID, role, number, and branch MUST be derived strictly from the real matching records. ZERO mock data, ZERO hallucinations.
+5. In "kpiMetrics", set "monitored" to "${matchingRecordsSample.length}" (${matchingRecordsSample.length} staff matching "${adminPrompt}").
+`
+    : `
 CRITICAL COVERAGE DIRECTIVE (MANDATORY REQUIREMENT: AT LEAST 3 ISSUES PER CSV):
 There are ${files.length} connected dataset(s):
 ${filesListStr}
@@ -175,15 +207,12 @@ You MUST generate AT LEAST ${expectedTotalIssues} attention items in the "attent
 - If 3 CSVs are connected: generate at least 9 dataset items (3 for each file) + 1 cross-dataset correlation = at least 10 items total.
 - If 2 CSVs are connected: generate at least 6 dataset items (3 for each file) + 1 cross-dataset correlation = at least 7 items total.
 - If 1 CSV is connected: generate at least 3 distinct dataset items.
-
-Under NO circumstances should you output fewer than 3 issues for any connected file.
-Every item MUST have concise fields (1-2 sentences in "description", 2 evidence items, 1 possibleCause, and 2 concise decisionOptions).
 `;
 
   const prompt = `You are the Chief AI Workforce & Management Intelligence Brain for Brynex One AI.
 You are analyzing actual uploaded enterprise datasets to support executive management decisions.
 
-CONNECTED DATASETS (${files.length} active files):
+CONNECTED DATASETS (${activeFiles.length} active files):
 ${filesListStr}
 
 DATASET TELEMETRY EXTRACTED FROM UPLOADED FILES:
@@ -196,25 +225,17 @@ ${JSON.stringify(matchingRecordsSample, null, 2)}
 USER CUSTOM INSTRUCTIONS / PROMPT:
 ${adminPrompt ? `"${adminPrompt}"` : 'Analyze the datasets comprehensively across workforce availability, shifts, retention, sales productivity, and operational risks.'}
 
-${adminPrompt && adminPrompt.trim() ? `CRITICAL PROMPT FOCUS DIRECTIVE:
-The user has provided a custom instruction / prompt: "${adminPrompt}".
-- You MUST tailor your ENTIRE analysis, attention items, issues, root causes, evidence, and recommendations strictly to align with this prompt.
-- If the prompt specifies a role (e.g. "FASHION CONSULTANT"), department, branch, or criteria, evaluate records matching that instruction.
-- The "kpiMetrics" (especially "monitored", "issues", "productivity") and "attentionSummary" must directly reflect this target group.
-- Citing specific names, roles, branches, salaries, and metrics from the actual records matching this prompt is mandatory.
-` : ''}
-
 CUSTOM BENCHMARKS / RULES:
 - Target Attrition: ${(customRules && customRules.targetAttrition) || 5.0}%
 - Target Productivity: ${(customRules && customRules.targetProductivity) || 90}%
 - Department Scope: ${(customRules && customRules.targetDepartment) || 'All'}
 
 TASK:
-1. Examine the actual row data, columns, numeric values, anomalies, and records from ALL uploaded datasets:
+1. Examine the actual row data, columns, numeric values, anomalies, and records from the uploaded datasets:
 ${filesListStr}
 
-2. Follow the multi-dataset coverage directive:
-${multiDatasetDirective}
+2. Follow the coverage and prompt focus directive:
+${coverageDirective}
 
 3. Keep all fields strictly concise and compact (1-2 sentences per description, 1-2 evidence records, 1 possibleCause, and 2 concise decisionOptions per issue). Never generate run-on essays.
 4. Compute an overall composite HR Health Score (0 to 100) based strictly on the findings in the data.
@@ -342,17 +363,29 @@ Respond ONLY with a single valid, parseable JSON object matching this exact sche
   parsedAnalysis.connectedFilesCount = files.length;
   parsedAnalysis.adminPromptApplied = adminPrompt || null;
 
-  // Guarantee that kpiMetrics "issues" and "decisions" strictly match parsedAnalysis.attentionItems.length!
+  // Filter returned attention items to enforce prompt isolation
+  if (parsedAnalysis.attentionItems && Array.isArray(parsedAnalysis.attentionItems) && intent.isFiltered) {
+    parsedAnalysis.attentionItems = parsedAnalysis.attentionItems.filter((item) => itemMatchesPrompt(item, intent));
+  }
+
+  // Guarantee that kpiMetrics "issues", "decisions", and "monitored" strictly match parsedAnalysis.attentionItems.length!
   if (parsedAnalysis.attentionItems && Array.isArray(parsedAnalysis.attentionItems)) {
     if (parsedAnalysis.kpiMetrics && Array.isArray(parsedAnalysis.kpiMetrics)) {
       const issuesKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'issues');
       if (issuesKpi) {
         issuesKpi.value = String(parsedAnalysis.attentionItems.length);
-        issuesKpi.trend = `${parsedAnalysis.attentionItems.length} active risks across datasets`;
+        issuesKpi.trend = intent.isFiltered
+          ? `${parsedAnalysis.attentionItems.length} active risks for "${adminPrompt}"`
+          : `${parsedAnalysis.attentionItems.length} active risks across datasets`;
       }
       const decisionsKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'decisions');
       if (decisionsKpi) {
         decisionsKpi.value = String(parsedAnalysis.attentionItems.length);
+      }
+      const monitoredKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'monitored');
+      if (monitoredKpi && intent.isFiltered) {
+        monitoredKpi.value = String(matchingRecordsSample.length);
+        monitoredKpi.trend = `${matchingRecordsSample.length} records matching "${adminPrompt}"`;
       }
     }
   }
@@ -402,8 +435,30 @@ export const runClaudeApiAnalysis = async ({ stores = [], employees = [], adminP
     };
   });
 
-  // Extract representative staff members from real employees
-  const staffSample = employees.slice(0, 35).map((e) => ({
+  // Filter stores and staff based on prompt intent
+  const intent = parsePromptIntent(adminPrompt);
+  const relevantStores = intent.isFiltered
+    ? storeSummaries.filter((s) => matchesBranch(s.name, intent))
+    : storeSummaries;
+  const compactStores = (relevantStores.length > 0 ? relevantStores : storeSummaries).slice(0, 8);
+
+  // Extract compact representative staff sample focused on relevant branches
+  const relevantStaff = intent.isFiltered
+    ? employees.filter((e) =>
+        recordMatchesPrompt(
+          {
+            branch: e.summary?.workingBranch,
+            role: e.summary?.designation,
+            dept: e.summary?.department,
+            name: e.summary?.name,
+            id: e.summary?.empId
+          },
+          intent
+        )
+      )
+    : employees;
+  const compactStaff = (relevantStaff.length > 0 ? relevantStaff : employees).slice(0, 15);
+  const staffSample = compactStaff.map((e) => ({
     name: e.summary?.name || null,
     id: e.summary?.empId || null,
     role: e.summary?.designation || null,
@@ -411,17 +466,16 @@ export const runClaudeApiAnalysis = async ({ stores = [], employees = [], adminP
     branch: e.summary?.workingBranch || null,
     target: e.salesAttributions?.targets?.[0]?.targets?.targetAmount || 0,
     sales: e.salesAttributions?.dappr?.[0]?.attribution?.netSales || 0,
-    assessmentScore: e.learning?.assessmentAttempts?.[0]?.percentage ?? e.learning?.assessmentAttempts?.[0]?.score ?? null,
-    trainingStatus: e.learning?.trainingProgress?.[0]?.status || null
+    assessmentScore: e.learning?.assessmentAttempts?.[0]?.percentage ?? e.learning?.assessmentAttempts?.[0]?.score ?? null
   }));
 
   const prompt = `You are the Chief AI Retail Workforce & Management Intelligence Brain for Brynex One AI.
-You are evaluating LIVE LMS retail telemetry across ${stores.length} store branches and ${employees.length} employee profiles.
+You are evaluating LIVE LMS retail telemetry across key store branches and employee profiles.
 
-EXTERNAL RETAIL TELEMETRY (${stores.length} STORES):
-${JSON.stringify(storeSummaries, null, 2)}
+EXTERNAL RETAIL TELEMETRY (${compactStores.length} FOCUSED STORES):
+${JSON.stringify(compactStores, null, 2)}
 
-EMPLOYEE PROFILES TELEMETRY (Sample of ${staffSample.length} frontline consultants & staff):
+EMPLOYEE PROFILES TELEMETRY (Sample of ${staffSample.length} staff):
 ${JSON.stringify(staffSample, null, 2)}
 
 USER CUSTOM PROMPT / INSTRUCTION:
@@ -429,6 +483,10 @@ USER CUSTOM PROMPT / INSTRUCTION:
 
 TASK & DIRECTIVES:
 1. You MUST tailor your entire analysis strictly to the user's prompt:
+   - Target Scope: ${intent.brand ? `Brand ${intent.brand} ` : ''}${intent.location ? `Branch: ${intent.location}` : ''} (${intent.cleaned}).
+   ${intent.brand === 'G' ? '- The user asked for Brand G (Suitor Guy Edappally / G-Edappally). You MUST NEVER include, cite, or mention Z-Edappally, Zorucci, Zeness, Zubar, or any Z format stores or staff.' : ''}
+   ${intent.brand === 'Z' ? '- The user asked for Brand Z (Zorucci Edappally / Z-Edappally). You MUST NEVER include, cite, or mention G-Edappally, Suitor Guy, SG, or any G format stores or staff.' : ''}
+   - Evaluate the exact targets, net sales, footfall, and conversion for this target group.
    - If the user specifies a particular store (e.g. Edappally, Kollam, Trivandrum, Perinthalmanna, Kottayam), evaluate that branch's exact targets, net sales, footfall, and conversion in depth.
    - If the user asks for "lagging stores", evaluate the lowest quota attainment stores.
    - If the user asks about "consultants" or "skills" or "accessories", evaluate the assessment pass rates vs sales conversion.
@@ -525,7 +583,7 @@ Respond ONLY with a single valid, parseable JSON object matching this exact sche
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8192,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     })
@@ -544,20 +602,47 @@ Respond ONLY with a single valid, parseable JSON object matching this exact sche
     cleanJsonText = cleanJsonText.substring(firstBrace, lastBrace + 1);
   }
 
-  let parsedAnalysis = JSON.parse(cleanJsonText);
+  let parsedAnalysis = null;
+  try {
+    parsedAnalysis = JSON.parse(cleanJsonText);
+  } catch (parseErr) {
+    const lastItemIdx = cleanJsonText.lastIndexOf('},\n    {');
+    if (lastItemIdx !== -1) {
+      try {
+        const repaired = cleanJsonText.substring(0, lastItemIdx + 1) + '\n  ]\n}';
+        parsedAnalysis = JSON.parse(repaired);
+      } catch (_) {
+        throw parseErr;
+      }
+    } else {
+      throw parseErr;
+    }
+  }
+
   parsedAnalysis.analyzedAt = new Date().toISOString();
   parsedAnalysis.adminPromptApplied = adminPrompt || null;
+
+  if (parsedAnalysis.attentionItems && Array.isArray(parsedAnalysis.attentionItems) && intent.isFiltered) {
+    parsedAnalysis.attentionItems = parsedAnalysis.attentionItems.filter((item) => itemMatchesPrompt(item, intent));
+  }
 
   if (parsedAnalysis.attentionItems && Array.isArray(parsedAnalysis.attentionItems)) {
     if (parsedAnalysis.kpiMetrics && Array.isArray(parsedAnalysis.kpiMetrics)) {
       const issuesKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'issues');
       if (issuesKpi) {
         issuesKpi.value = String(parsedAnalysis.attentionItems.length);
-        issuesKpi.trend = `${parsedAnalysis.attentionItems.length} active risks across datasets`;
+        issuesKpi.trend = intent.isFiltered
+          ? `${parsedAnalysis.attentionItems.length} active risks for "${adminPrompt}"`
+          : `${parsedAnalysis.attentionItems.length} active risks across datasets`;
       }
       const decisionsKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'decisions');
       if (decisionsKpi) {
         decisionsKpi.value = String(parsedAnalysis.attentionItems.length);
+      }
+      const monitoredKpi = parsedAnalysis.kpiMetrics.find((k) => k.id === 'monitored');
+      if (monitoredKpi && intent.isFiltered) {
+        monitoredKpi.value = String(relevantStaff.length);
+        monitoredKpi.trend = `${relevantStaff.length} staff matching "${adminPrompt}"`;
       }
     }
   }

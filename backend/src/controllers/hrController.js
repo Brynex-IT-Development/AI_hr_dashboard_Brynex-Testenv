@@ -5,6 +5,7 @@ import { analyzeMultiFileHrData, identifyFileScope } from '../services/multiFile
 import { runClaudeDocumentAnalysis, runClaudeApiAnalysis } from '../services/aiDocumentAnalyzerService.js';
 import { aggregateHrIntelligence } from '../services/hrIntelligenceAggregator.js';
 import { fetchAllStoresOverview, fetchAllEmployeesOverview } from '../services/externalIntegrationService.js';
+import { parsePromptIntent, recordMatchesPrompt, itemMatchesPrompt } from '../services/promptMatcherService.js';
 
 // In-memory stores (strictly populated by actual file uploads)
 let uploadedFilesStore = [];
@@ -16,6 +17,7 @@ let cachedEnterpriseAnalytics = null;
 let activeAdminPrompt = '';
 let activeCustomRules = null;
 let isAiAnalyzingGlobal = false;
+const promptAnalysisCache = new Map();
 
 const UPLOADS_DIR = fs.existsSync(path.join(process.cwd(), 'uploads'))
   ? path.join(process.cwd(), 'uploads')
@@ -56,89 +58,14 @@ export const filterEmployeesByPrompt = (employees = [], prompt = '', customRules
     filtered = filtered.filter((e) => (e.dept || '').toLowerCase().includes(dTarget));
   }
 
-  // 2. Keyword/phrase filter from prompt
-  const p = (prompt || '').trim().toLowerCase();
-  if (p && !p.includes('no prompt') && !p.includes('all data') && !p.includes('show all')) {
-    // Check specific conditions: overtime
-    if (p.includes('overtime') || p.includes(' ot ')) {
-      const otMatch = filtered.filter((e) => {
-        const val = parseFloat(String(e.ot).replace(/[^0-9.]/g, '')) || 0;
-        return val > 0;
-      });
-      if (otMatch.length > 0) return otMatch;
-    }
-
-    // Check specific conditions: notice / resignation / exit
-    if (p.includes('notice') || p.includes('resigned') || p.includes('exit') || p.includes('attrition')) {
-      const exitMatch = filtered.filter((e) => {
-        const r = (e.risk || '').toLowerCase();
-        return r.includes('critical') || r.includes('high') || r.includes('notice') || r.includes('exit');
-      });
-      if (exitMatch.length > 0) return exitMatch;
-    }
-
-    // Strip filler phrases to isolate core target (e.g. "only show FASHION CONSULTANT data" -> "fashion consultant")
-    const cleaned = p
-      .replace(/\bonly show\b/gi, '')
-      .replace(/\bshow\b/gi, '')
-      .replace(/\bfocus on\b/gi, '')
-      .replace(/\bfilter by\b/gi, '')
-      .replace(/\bdata\b/gi, '')
-      .replace(/\bemployees?\b/gi, '')
-      .replace(/\bstaff\b/gi, '')
-      .replace(/\bprofiles?\b/gi, '')
-      .replace(/\bplease\b/gi, '')
-      .replace(/\ball\b/gi, '')
-      .trim();
-
-    if (cleaned.length > 0) {
-      // Direct substring match on role, dept, branch, name, or id
-      const exactMatch = filtered.filter((e) => {
-        const role = (e.role || '').toLowerCase();
-        const dept = (e.dept || '').toLowerCase();
-        const branch = (e.branch || '').toLowerCase();
-        const name = (e.name || '').toLowerCase();
-        const id = (e.id || '').toLowerCase();
-        return (
-          role.includes(cleaned) ||
-          dept.includes(cleaned) ||
-          branch.includes(cleaned) ||
-          name.includes(cleaned) ||
-          id.includes(cleaned)
-        );
-      });
-
-      if (exactMatch.length > 0) {
-        return exactMatch;
-      }
-
-      // Word-by-word token matching for multi-word queries
-      const tokens = cleaned.split(/\s+/).filter((t) => t.length > 2);
-      if (tokens.length > 0) {
-        const tokenMatch = filtered.filter((e) => {
-          const hay = `${e.role} ${e.dept} ${e.branch} ${e.name} ${e.id}`.toLowerCase();
-          return tokens.some((t) => hay.includes(t));
-        });
-        if (tokenMatch.length > 0) {
-          return tokenMatch;
-        }
-      }
-    }
+  // 2. Intent-based matching
+  const intent = parsePromptIntent(prompt);
+  if (!intent.isFiltered) {
+    return filtered;
   }
 
-  return filtered;
+  return filtered.filter((e) => recordMatchesPrompt(e, intent));
 };
-
-export const isRealAiItem = (item) =>
-  Boolean(
-    item &&
-    typeof item.title === 'string' &&
-    item.title.trim().length > 0 &&
-    !String(item.id || '').startsWith('flag-') &&
-    !String(item.id || '').startsWith('att-store-') &&
-    !String(item.id || '').startsWith('att-audit-') &&
-    !String(item.id || '').startsWith('att-csv-')
-  );
 
 /**
  * Merge CSV-derived intelligence with Live External LMS API Telemetry
@@ -148,54 +75,63 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
   if (!csvAnalysis) return apiAnalysis;
   if (!apiAnalysis) return csvAnalysis;
 
+  const intent = parsePromptIntent(activeAdminPrompt);
+
   const csvItems = (csvAnalysis && Array.isArray(csvAnalysis.attentionItems)) ? csvAnalysis.attentionItems : [];
   const apiItems = (apiAnalysis && Array.isArray(apiAnalysis.attentionItems)) ? apiAnalysis.attentionItems : [];
 
   const seenIds = new Set();
-  const combinedAttentionItems = [];
+  let combinedAttentionItems = [];
 
-  // 1. Add CSV-derived intelligence items first (real AI items only)
+  // 1. Add CSV-derived intelligence items first
   for (const item of csvItems) {
-    if (isRealAiItem(item) && !seenIds.has(String(item.id))) {
+    if (item && item.id && !seenIds.has(String(item.id))) {
       seenIds.add(String(item.id));
       combinedAttentionItems.push(item);
     }
   }
 
-  // 2. Add Live LMS API Telemetry items (real AI items only)
+  // 2. Add Live LMS API Telemetry items (Store 360, Employee 360, Store Operations 360)
   for (const item of apiItems) {
-    if (isRealAiItem(item) && !seenIds.has(String(item.id))) {
+    if (item && item.id && !seenIds.has(String(item.id))) {
       seenIds.add(String(item.id));
       combinedAttentionItems.push(item);
     }
   }
 
-  // Calculate synchronized KPI counters strictly from real AI-analyzed items
+  // Enforce prompt isolation on attention items to prevent cross-branch leakage
+  if (intent.isFiltered) {
+    combinedAttentionItems = combinedAttentionItems.filter((item) => itemMatchesPrompt(item, intent));
+  }
+
+  // Calculate synchronized KPI counters
   const totalIssues = combinedAttentionItems.length;
-  const awaitedDecisionsCount = combinedAttentionItems.reduce(
-    (acc, i) => acc + (Array.isArray(i.decisionOptions) ? i.decisionOptions.length : (i.decisionOptions ? 1 : 0)),
-    0
-  ) || totalIssues;
+  const awaitedDecisionsCount = combinedAttentionItems.filter(
+    (i) => i.decisionOptions && i.decisionOptions.length > 0
+  ).length || totalIssues;
   const opportunitiesCount = combinedAttentionItems.filter(
     (i) => i.category === 'Opportunity'
   ).length;
 
-  const baseKpis = (csvAnalysis.kpiMetrics || apiAnalysis.kpiMetrics || []);
-  const mergedKpis = baseKpis.map((kpi) => {
+  const totalHeadcount = intent.isFiltered
+    ? (cachedSyncedEmployees.length > 0 ? cachedSyncedEmployees.length : (csvAnalysis.totalRecords || 0))
+    : (csvAnalysis.totalRecords || allSyncedEmployees.length || 0);
+
+  const mergedKpis = (csvAnalysis.kpiMetrics || apiAnalysis.kpiMetrics || []).map((kpi) => {
     if (kpi.id === 'issues') {
       return {
         ...kpi,
         value: String(totalIssues),
-        trend: totalIssues > 0 ? `${totalIssues} active risks across datasets` : 'No active risks detected',
-        trendPositive: totalIssues === 0
+        trend: intent.isFiltered
+          ? `${totalIssues} active risks for "${activeAdminPrompt}"`
+          : `${totalIssues} active risks across datasets`
       };
     }
     if (kpi.id === 'decisions') {
       return {
         ...kpi,
         value: String(awaitedDecisionsCount),
-        trend: awaitedDecisionsCount > 0 ? `${awaitedDecisionsCount} management options ready for approval` : 'No pending decisions',
-        trendPositive: totalIssues === 0
+        trend: `${awaitedDecisionsCount} management options ready for approval`
       };
     }
     if (kpi.id === 'opportunities') {
@@ -205,10 +141,21 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
         trend: `${opportunitiesCount} optimization areas detected`
       };
     }
+    if (kpi.id === 'monitored') {
+      return {
+        ...kpi,
+        value: String(totalHeadcount),
+        trend: intent.isFiltered
+          ? `${totalHeadcount} staff matching "${activeAdminPrompt}"`
+          : `${totalHeadcount} staff monitored`
+      };
+    }
     return kpi;
   });
 
-  const totalHeadcount = (csvAnalysis.totalRecords || allSyncedEmployees.length || 0);
+  const attentionSummary = intent.isFiltered
+    ? `Active Focus: "${activeAdminPrompt}". Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} matching records). ${combinedAttentionItems.length} active management issues.`
+    : `Dual-layer intelligence active: Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} employee records) correlated with Live Retail LMS API telemetry. ${combinedAttentionItems.length} total attention issues active.`;
 
   return {
     ...apiAnalysis,
@@ -216,10 +163,8 @@ export const mergeDualLayerAnalysis = (csvAnalysis, apiAnalysis = cachedApiAnaly
     kpiMetrics: mergedKpis,
     attentionItems: combinedAttentionItems,
     connectedFilesCount: uploadedFilesStore.length,
-    attentionSummary: totalIssues > 0
-      ? `Dual-layer intelligence active: Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} employee records) correlated with Live Retail LMS API telemetry. ${totalIssues} total attention issues active.`
-      : `Dual-layer intelligence active: Ingested ${uploadedFilesStore.length} dataset(s) (${totalHeadcount} employee records). No AI issues fetched yet. Run AI analysis to synthesize workforce telemetry.`,
-    adminPromptApplied: activeAdminPrompt || null,
+    fileNames: uploadedFilesStore.map((f) => f.name),
+    attentionSummary,
     storesSummary: apiAnalysis.storesSummary || csvAnalysis.storesSummary,
     enterpriseAnalytics: apiAnalysis.enterpriseAnalytics || csvAnalysis.enterpriseAnalytics,
     employeesSummary: apiAnalysis.employeesSummary || csvAnalysis.employeesSummary
@@ -253,11 +198,6 @@ export const recomputeAnalytics = async (prompt = activeAdminPrompt, rules = act
         customRules: activeCustomRules,
         adminPrompt: activeAdminPrompt
       });
-      // Preserve existing AI-synthesized attention items if present and real
-      const existingAiItems = (latestAnalysis && Array.isArray(latestAnalysis.attentionItems))
-        ? latestAnalysis.attentionItems.filter(isRealAiItem)
-        : [];
-      instantCsv.attentionItems = existingAiItems;
       latestAnalysis = mergeDualLayerAnalysis(instantCsv, cachedApiAnalysis);
     }
 
@@ -281,8 +221,10 @@ const hydrateFilesFromDisk = async () => {
           const filePath = path.join(UPLOADS_DIR, meta.savedFilename);
           if (fs.existsSync(filePath)) {
             const parsedRows = await parseUploadedFile(filePath, meta.name);
+            const detectedHolds = identifyFileScope(meta.name, parsedRows);
             restored.push({
               ...meta,
+              holds: detectedHolds,
               downloadUrl: `/api/hr/files/${meta.savedFilename}/download`,
               rows: parsedRows.length,
               parsedRows
@@ -292,6 +234,25 @@ const hydrateFilesFromDisk = async () => {
 
         if (restored.length > 0) {
           uploadedFilesStore = restored;
+          try {
+            const existingContent = fs.readFileSync(REGISTRY_PATH, 'utf-8');
+            const currentString = JSON.stringify({
+              files: uploadedFilesStore.map((f) => ({
+                id: f.id,
+                name: f.name,
+                savedFilename: f.savedFilename,
+                holds: f.holds,
+                period: f.period,
+                status: f.status,
+                uploadedAt: f.uploadedAt
+              })),
+              activeAdminPrompt,
+              activeCustomRules
+            }, null, 2);
+            if (existingContent.trim() !== currentString.trim()) {
+              persistFilesRegistry();
+            }
+          } catch (_) {}
           console.log(`[Hydration] Successfully hydrated ${restored.length} connected files from disk.`);
         }
       }
@@ -301,78 +262,6 @@ const hydrateFilesFromDisk = async () => {
   } finally {
     // ALWAYS initialize baseline/dual-layer intelligence so state is never null/empty
     await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
-    // Automatically trigger pure Claude AI synthesis on boot so main issues are ready when the user opens the page!
-    triggerBackgroundAiSynthesis(activeAdminPrompt, activeCustomRules);
-  }
-};
-
-/**
- * Automatically trigger pure Claude AI synthesis in the background.
- * Synthesizes top/main issues based on actual uploaded CSVs or Live Retail LMS API telemetry.
- * Zero mock data, zero fallback data, zero hardcoded responses.
- */
-export const triggerBackgroundAiSynthesis = (prompt = activeAdminPrompt, rules = activeCustomRules) => {
-  if (isAiAnalyzingGlobal) {
-    console.log('[AI Synthesis] Analysis already actively running in background.');
-    return;
-  }
-
-  isAiAnalyzingGlobal = true;
-  activeAdminPrompt = prompt || '';
-  activeCustomRules = rules || null;
-
-  console.log(`[AI Synthesis] Running pure Claude AI diagnostic synthesis (Prompt: "${activeAdminPrompt || 'Top Network Priorities'}", Files: ${uploadedFilesStore.length})...`);
-
-  if (uploadedFilesStore.length > 0) {
-    runClaudeDocumentAnalysis({
-      files: uploadedFilesStore,
-      customRules: activeCustomRules,
-      adminPrompt: activeAdminPrompt
-    })
-      .then((dynamicAnalysis) => {
-        if (dynamicAnalysis && dynamicAnalysis.attentionItems) {
-          latestAnalysis = mergeDualLayerAnalysis(dynamicAnalysis, cachedApiAnalysis);
-          console.log(`[AI Synthesis] Document synthesis completed with ${latestAnalysis.attentionItems.length} real issues.`);
-        }
-      })
-      .catch((aiErr) => {
-        console.warn('Claude dynamic analysis error:', aiErr.message);
-      })
-      .finally(() => {
-        isAiAnalyzingGlobal = false;
-      });
-  } else {
-    // Live Retail LMS API Telemetry synthesis via Claude
-    Promise.all([fetchAllStoresOverview(), fetchAllEmployeesOverview()])
-      .then(([stores, employees]) => {
-        return runClaudeApiAnalysis({
-          stores,
-          employees,
-          adminPrompt: activeAdminPrompt,
-          customRules: activeCustomRules
-        });
-      })
-      .then((apiAiAnalysis) => {
-        if (apiAiAnalysis && apiAiAnalysis.attentionItems && apiAiAnalysis.attentionItems.length > 0) {
-          latestAnalysis = {
-            ...latestAnalysis,
-            healthScore: apiAiAnalysis.healthScore ? `${apiAiAnalysis.healthScore}%` : latestAnalysis.healthScore,
-            healthStatus: apiAiAnalysis.healthStatus || latestAnalysis.healthStatus,
-            attentionSummary: apiAiAnalysis.attentionSummary || latestAnalysis.attentionSummary,
-            kpiMetrics: apiAiAnalysis.kpiMetrics || latestAnalysis.kpiMetrics,
-            attentionItems: apiAiAnalysis.attentionItems,
-            adminPromptApplied: activeAdminPrompt
-          };
-          cachedApiAnalysis = latestAnalysis;
-          console.log(`[AI Synthesis] Retail LMS API synthesis completed with ${latestAnalysis.attentionItems.length} real issues.`);
-        }
-      })
-      .catch((aiErr) => {
-        console.warn('Claude API analysis error:', aiErr.message);
-      })
-      .finally(() => {
-        isAiAnalyzingGlobal = false;
-      });
   }
 };
 
@@ -616,14 +505,12 @@ export const getLatestHrAnalysis = async (req, res) => {
   if (!latestAnalysis) {
     await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
   }
-
-  const hasRealAiItems = latestAnalysis && Array.isArray(latestAnalysis.attentionItems) && latestAnalysis.attentionItems.some(isRealAiItem);
-
-  // When opening the page, if no AI analysis has been run yet, automatically trigger pure Claude AI to find the main issues!
-  if (!hasRealAiItems && !isAiAnalyzingGlobal) {
-    triggerBackgroundAiSynthesis(activeAdminPrompt, activeCustomRules);
+  // Enforce idle state if no active admin prompt and no uploaded files
+  if (!activeAdminPrompt && uploadedFilesStore.length === 0) {
+    if (latestAnalysis?.attentionItems?.length > 0) {
+      await recomputeAnalytics('', activeCustomRules);
+    }
   }
-
   res.json({
     status: 'success',
     data: latestAnalysis,
@@ -638,14 +525,83 @@ export const getLatestHrAnalysis = async (req, res) => {
 export const runCustomAiAnalysis = async (req, res) => {
   try {
     const { adminPrompt = '', customRules = null } = req.body;
-    activeAdminPrompt = adminPrompt;
+    activeAdminPrompt = (adminPrompt || '').trim();
     activeCustomRules = customRules;
 
-    await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
+    const cacheKey = activeAdminPrompt.toLowerCase();
 
-    // Trigger pure Claude AI synthesis with user instruction (or default baseline if prompt is reset)
-    triggerBackgroundAiSynthesis(activeAdminPrompt, activeCustomRules);
+    // If prompt is empty and no uploaded files exist, return clean idle baseline immediately
+    if (!activeAdminPrompt && uploadedFilesStore.length === 0) {
+      await recomputeAnalytics('', activeCustomRules);
+      isAiAnalyzingGlobal = false;
+      return res.json({
+        status: 'success',
+        data: latestAnalysis,
+        isAiAnalyzing: false,
+        activePrompt: '',
+        customRules: activeCustomRules,
+        employeesCount: cachedSyncedEmployees.length,
+        totalEmployeesCount: allSyncedEmployees.length
+      });
+    }
 
+    // Check fast in-memory cache for repeated prompts (instant 0ms response)
+    if (activeAdminPrompt && uploadedFilesStore.length === 0 && promptAnalysisCache.has(cacheKey)) {
+      const cachedResult = promptAnalysisCache.get(cacheKey);
+      latestAnalysis = cachedResult;
+      cachedApiAnalysis = cachedResult;
+      isAiAnalyzingGlobal = false;
+      return res.json({
+        status: 'success',
+        data: latestAnalysis,
+        isAiAnalyzing: false,
+        activePrompt: activeAdminPrompt,
+        customRules: activeCustomRules,
+        employeesCount: cachedSyncedEmployees.length,
+        totalEmployeesCount: allSyncedEmployees.length
+      });
+    }
+
+    if (uploadedFilesStore.length > 0) {
+      await recomputeAnalytics(activeAdminPrompt, activeCustomRules);
+      const instantCsv = await analyzeMultiFileHrData({
+        files: uploadedFilesStore,
+        customRules: activeCustomRules,
+        adminPrompt: activeAdminPrompt
+      });
+      latestAnalysis = mergeDualLayerAnalysis(instantCsv, cachedApiAnalysis);
+      isAiAnalyzingGlobal = true;
+
+      res.json({
+        status: 'success',
+        data: latestAnalysis,
+        isAiAnalyzing: true,
+        activePrompt: activeAdminPrompt,
+        customRules: activeCustomRules,
+        employeesCount: cachedSyncedEmployees.length,
+        totalEmployeesCount: allSyncedEmployees.length
+      });
+
+      runClaudeDocumentAnalysis({
+        files: uploadedFilesStore,
+        customRules: activeCustomRules,
+        adminPrompt: activeAdminPrompt
+      }).then((dynamicAnalysis) => {
+        if (dynamicAnalysis && dynamicAnalysis.attentionItems) {
+          latestAnalysis = mergeDualLayerAnalysis(dynamicAnalysis, cachedApiAnalysis);
+        }
+      }).catch((aiErr) => {
+        console.warn('Claude dynamic analysis fallback to mathematical correlator:', aiErr.message);
+      }).finally(() => {
+        isAiAnalyzingGlobal = false;
+      });
+      return;
+    }
+
+    // Pure Real Data Fetching & Live Claude AI Synthesis (Zero Mock/Hardcoded Data)
+    isAiAnalyzingGlobal = true;
+
+    // Send immediate response so frontend triggers the high-level human loading UI
     res.json({
       status: 'success',
       data: latestAnalysis,
@@ -655,6 +611,43 @@ export const runCustomAiAnalysis = async (req, res) => {
       employeesCount: cachedSyncedEmployees.length,
       totalEmployeesCount: allSyncedEmployees.length
     });
+
+    // 1. Fetch live LMS store and employee datasets from external APIs / cache
+    const [stores, employees] = await Promise.all([
+      fetchAllStoresOverview(),
+      fetchAllEmployeesOverview()
+    ]);
+
+    // 2. Perform live, dynamic Claude AI synthesis directly on the real store and staff records
+    runClaudeApiAnalysis({
+      stores,
+      employees,
+      adminPrompt: activeAdminPrompt,
+      customRules: activeCustomRules
+    })
+      .then((apiAiAnalysis) => {
+        if (apiAiAnalysis && apiAiAnalysis.attentionItems && apiAiAnalysis.attentionItems.length > 0) {
+          latestAnalysis = {
+            ...latestAnalysis,
+            healthScore: apiAiAnalysis.healthScore ? `${apiAiAnalysis.healthScore}%` : latestAnalysis.healthScore,
+            healthStatus: apiAiAnalysis.healthStatus || latestAnalysis.healthStatus,
+            attentionSummary: apiAiAnalysis.attentionSummary || latestAnalysis.attentionSummary,
+            kpiMetrics: apiAiAnalysis.kpiMetrics || latestAnalysis.kpiMetrics,
+            attentionItems: apiAiAnalysis.attentionItems,
+            adminPromptApplied: activeAdminPrompt
+          };
+          cachedApiAnalysis = latestAnalysis;
+          promptAnalysisCache.set(cacheKey, latestAnalysis);
+        }
+      })
+      .catch((aiErr) => {
+        console.warn('Claude API live synthesis error:', aiErr.message);
+      })
+      .finally(() => {
+        isAiAnalyzingGlobal = false;
+      });
+
+    return;
   } catch (error) {
     res.status(500).json({ status: 'error', message: error.message });
   }

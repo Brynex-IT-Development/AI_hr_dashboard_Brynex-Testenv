@@ -46,15 +46,15 @@ export default function Header({ toggleSidebar }) {
 
   return (
     <header className="top-navbar">
-      {/* Left: Hamburger + Title & Breadcrumbs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button 
-          onClick={toggleSidebar} 
-          style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', padding: '4px', borderRadius: '4px' }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+      {/* Left: Title & Breadcrumbs + Hamburger Button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <button
+          className="top-navbar-hamburger-btn"
+          onClick={toggleSidebar}
+          title="Toggle Navigation Menu"
+          aria-label="Toggle Navigation Menu"
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
         <div className="top-navbar-title-group">
           <h1 className="top-navbar-heading">{title}</h1>
@@ -88,13 +88,11 @@ export default function Header({ toggleSidebar }) {
 
         {/* User Profile Pill */}
         <div className="top-navbar-user-profile">
-          <div className="user-avatar-circle">
-            <User size={16} />
-          </div>
-          <div className="user-text-info">
-            <span className="user-name">Username</span>
-            <span className="user-role">Admin</span>
-          </div>
+          <img 
+            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" 
+            alt="User profile"
+            className="user-avatar-img"
+          />
           <ChevronDown size={14} className="user-dropdown-icon" />
         </div>
       </div>

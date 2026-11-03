@@ -161,7 +161,7 @@ export default function Sidebar() {
             <CheckSquare size={18} className="nav-icon" />
             <span>AI Tasks</span>
           </div>
-          <span className="badge badge-green">4</span>
+          <span className="badge badge-green">12</span>
         </NavLink>
 
         <NavLink 
@@ -172,7 +172,7 @@ export default function Sidebar() {
             <MessageSquare size={18} className="nav-icon" />
             <span>AI Assistant</span>
           </div>
-          <span className="badge badge-mint">Live</span>
+          <span className="badge badge-mint">New</span>
         </NavLink>
 
         {/* SYSTEM & GENERAL */}
